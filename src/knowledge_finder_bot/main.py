@@ -1,13 +1,12 @@
-"""Application entrypoint - aiohttp server with Bot Framework."""
+"""Application entrypoint - aiohttp server with M365 Agents SDK."""
 
 import sys
 
 import structlog
 from aiohttp import web
-from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings
-from botbuilder.schema import Activity
+from microsoft_agents.hosting.aiohttp import CloudAdapter
 
-from knowledge_finder_bot.bot import NotebookLMBot
+from knowledge_finder_bot.bot import create_agent_app
 from knowledge_finder_bot.config import get_settings
 
 # Configure structlog
@@ -39,21 +38,14 @@ async def messages(request: web.Request) -> web.Response:
         request: The incoming HTTP request from Bot Framework
 
     Returns:
-        HTTP response (usually empty 200 for Bot Framework)
+        HTTP response from CloudAdapter
     """
-    if request.content_type != "application/json":
-        return web.Response(status=415)
-
-    body = await request.json()
-    activity = Activity().deserialize(body)
-    auth_header = request.headers.get("Authorization", "")
-
-    adapter: BotFrameworkAdapter = request.app["adapter"]
-    bot: NotebookLMBot = request.app["bot"]
+    adapter: CloudAdapter = request.app["adapter"]
+    agent_app = request.app["agent_app"]
 
     try:
-        await adapter.process_activity(activity, auth_header, bot.on_turn)
-        return web.Response(status=200)
+        response = await adapter.process(request, agent_app)
+        return response or web.Response(status=200)
     except Exception as e:
         logger.exception("Error processing activity", error=str(e))
         return web.Response(status=500)
@@ -79,20 +71,16 @@ def create_app() -> web.Application:
     """
     settings = get_settings()
 
-    # Create Bot Framework adapter
-    adapter_settings = BotFrameworkAdapterSettings(
-        app_id=settings.app_id,
-        app_password=settings.app_password,
-    )
-    adapter = BotFrameworkAdapter(adapter_settings)
+    # Create M365 Agents SDK adapter
+    adapter = CloudAdapter()
 
-    # Create bot
-    bot = NotebookLMBot(settings)
+    # Create agent application
+    agent_app = create_agent_app(settings)
 
-    # Create app
+    # Create aiohttp app
     app = web.Application()
     app["adapter"] = adapter
-    app["bot"] = bot
+    app["agent_app"] = agent_app
     app["settings"] = settings
 
     # Add routes

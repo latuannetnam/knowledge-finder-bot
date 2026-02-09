@@ -1,37 +1,42 @@
-"""Main bot class - Echo implementation for testing."""
+"""Main bot - Echo implementation using M365 Agents SDK."""
+
+import re
 
 import structlog
-from botbuilder.core import ActivityHandler, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
+from microsoft_agents.activity import ConversationUpdateTypes
+from microsoft_agents.hosting.core import (
+    AgentApplication,
+    ApplicationOptions,
+    MemoryStorage,
+    TurnContext,
+    TurnState,
+)
 
 from knowledge_finder_bot.config import Settings
 
 logger = structlog.get_logger()
 
 
-class NotebookLMBot(ActivityHandler):
-    """NotebookLM Bot - currently echoes messages for testing.
+def create_agent_app(settings: Settings) -> AgentApplication[TurnState]:
+    """Create and configure the agent application.
 
-    This basic implementation verifies Bot Framework integration works
-    before adding nlm-proxy and Azure AD functionality.
+    Args:
+        settings: Application configuration
+
+    Returns:
+        Configured AgentApplication instance
     """
+    options = ApplicationOptions(storage=MemoryStorage())
+    app: AgentApplication[TurnState] = AgentApplication(options)
 
-    def __init__(self, settings: Settings):
-        """Initialize bot with settings.
+    # Store settings for later use
+    app.settings = settings  # type: ignore[attr-defined]
 
-        Args:
-            settings: Application configuration
-        """
-        self.settings = settings
-
-    async def on_message_activity(self, turn_context: TurnContext) -> None:
-        """Handle incoming messages by echoing them back.
-
-        Args:
-            turn_context: The turn context for this turn of the conversation
-        """
-        user_message = turn_context.activity.text
-        user_name = turn_context.activity.from_property.name or "User"
+    @app.message(re.compile(r".*"))
+    async def on_message(context: TurnContext, state: TurnState) -> None:
+        """Handle incoming messages by echoing them back."""
+        user_message = context.activity.text
+        user_name = context.activity.from_property.name or "User"
 
         logger.info(
             "message_received",
@@ -41,31 +46,18 @@ class NotebookLMBot(ActivityHandler):
 
         # Echo the message back
         echo_text = f"**Echo from {user_name}:** {user_message}"
+        await context.send_activity(echo_text)
 
-        await turn_context.send_activity(
-            Activity(
-                type=ActivityTypes.message,
-                text=echo_text,
-                text_format="markdown",
-            )
-        )
-
-    async def on_members_added_activity(
-        self,
-        members_added: list,
-        turn_context: TurnContext,
-    ) -> None:
-        """Welcome new users to the conversation.
-
-        Args:
-            members_added: List of members added to the conversation
-            turn_context: The turn context for this turn
-        """
-        for member in members_added:
-            if member.id != turn_context.activity.recipient.id:
+    @app.conversation_update(ConversationUpdateTypes.MEMBERS_ADDED)
+    async def on_members_added(context: TurnContext, state: TurnState) -> None:
+        """Welcome new users to the conversation."""
+        for member in context.activity.members_added or []:
+            if member.id != context.activity.recipient.id:
                 welcome_text = (
                     "Hello! I'm the NotebookLM Bot.\n\n"
                     "Currently running in **echo mode** for testing.\n"
                     "Send me a message and I'll echo it back!"
                 )
-                await turn_context.send_activity(welcome_text)
+                await context.send_activity(welcome_text)
+
+    return app

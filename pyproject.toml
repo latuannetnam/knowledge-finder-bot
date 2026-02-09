@@ -5,8 +5,9 @@ description = "NotebookLM chatbot for MS Teams and Telegram"
 requires-python = ">=3.11"
 
 dependencies = [
-    "botbuilder-core>=4.14.0",
-    "botbuilder-integration-aiohttp>=4.14.0",
+    "microsoft-agents-hosting-core",
+    "microsoft-agents-hosting-aiohttp",
+    "microsoft-agents-activity",
     "aiohttp>=3.9.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
