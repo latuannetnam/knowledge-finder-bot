@@ -86,22 +86,76 @@ User (Teams/Telegram) → Azure Bot Service → Bot Backend (aiohttp:3978)
 
 ## M365 Agents SDK Pattern
 
-The bot uses decorator-based handlers with `AgentApplication`:
+The bot follows the **official Microsoft Agents SDK pattern** from [github.com/microsoft/Agents](https://github.com/microsoft/Agents).
+
+### Critical Requirements
+
+**1. Environment Variables** - Use the SDK-specific format:
+```bash
+# Required by M365 Agents SDK (different from legacy Bot Framework!)
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID=your-bot-app-id
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET=your-bot-app-password
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID=your-tenant-id
+```
+
+**2. Required Package** - Must include `microsoft-agents-authentication-msal`:
+```toml
+dependencies = [
+    "microsoft-agents-hosting-core",
+    "microsoft-agents-hosting-aiohttp",
+    "microsoft-agents-activity",
+    "microsoft-agents-authentication-msal",  # Critical for auth!
+]
+```
+
+### Architecture Pattern
 
 ```python
-def create_agent_app(settings: Settings) -> AgentApplication[TurnState]:
-    options = ApplicationOptions(storage=MemoryStorage())
-    app = AgentApplication(options)
+# Load SDK configuration from environment (critical!)
+from microsoft_agents.activity import load_configuration_from_env
+agents_sdk_config = load_configuration_from_env(environ)
 
-    @app.message(re.compile(r".*"))
-    async def on_message(context: TurnContext, state: TurnState):
-        # Handle user messages
+# Create core components
+from microsoft_agents.authentication.msal import MsalConnectionManager
+STORAGE = MemoryStorage()
+CONNECTION_MANAGER = MsalConnectionManager(**agents_sdk_config)
+ADAPTER = CloudAdapter(connection_manager=CONNECTION_MANAGER)
+AUTHORIZATION = Authorization(STORAGE, CONNECTION_MANAGER, **agents_sdk_config)
 
-    @app.conversation_update(ConversationUpdateTypes.MEMBERS_ADDED)
-    async def on_members_added(context: TurnContext, state: TurnState):
-        # Welcome new users
+# Create agent application
+AGENT_APP = AgentApplication[TurnState](
+    storage=STORAGE,
+    adapter=ADAPTER,
+    authorization=AUTHORIZATION,
+    **agents_sdk_config
+)
 
-    return app
+# Register handlers with decorators
+@AGENT_APP.message(re.compile(r".*"))
+async def on_message(context: TurnContext, state: TurnState):
+    await context.send_activity(f"Echo: {context.activity.text}")
+
+@AGENT_APP.conversation_update("membersAdded")
+async def on_members_added(context: TurnContext, state: TurnState):
+    await context.send_activity("Welcome!")
+```
+
+### Server Setup
+
+```python
+# main.py
+from microsoft_agents.hosting.aiohttp import (
+    start_agent_process,
+    jwt_authorization_middleware,
+)
+
+app = Application(middlewares=[jwt_authorization_middleware])
+app["agent_configuration"] = CONNECTION_MANAGER.get_default_connection_configuration()
+app["agent_app"] = AGENT_APP
+app["adapter"] = AGENT_APP.adapter  # Use adapter from agent app!
+
+async def messages(request: Request) -> Response:
+    return await start_agent_process(request, request.app["agent_app"], request.app["adapter"])
 ```
 
 All I/O is async. Use `await` for M365 Agents SDK and Graph API calls.
@@ -121,6 +175,13 @@ Two Azure AD app registrations required (see [azure-config.md](.claude/memory/az
 2. **Graph API Client** (read user groups with app-only permissions)
 
 Environment variables in `.env` (never commit):
+
+**M365 Agents SDK (required):**
+- `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID`
+- `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET`
+- `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID`
+
+**Legacy/Future features:**
 - `MICROSOFT_APP_ID`, `MICROSOFT_APP_PASSWORD`, `MICROSOFT_APP_TENANT_ID`
 - `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`
 

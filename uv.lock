@@ -658,6 +658,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "microsoft-agents-activity" },
+    { name = "microsoft-agents-authentication-msal" },
     { name = "microsoft-agents-hosting-aiohttp" },
     { name = "microsoft-agents-hosting-core" },
     { name = "msal" },
@@ -680,6 +681,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
     { name = "microsoft-agents-activity" },
+    { name = "microsoft-agents-authentication-msal" },
     { name = "microsoft-agents-hosting-aiohttp" },
     { name = "microsoft-agents-hosting-core" },
     { name = "msal", specifier = ">=1.24.0" },
@@ -708,6 +710,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f8/e9/7f8086719f28815baca72b2f2600ce1e62b7cd53826bb406c52f28e81998/microsoft_agents_activity-0.7.0.tar.gz", hash = "sha256:77eeb6ffa9ee9e6237e1dbf5e962ea641ff60f20b0966e68e903ffbc10ebd41d", size = 60673, upload-time = "2026-01-21T18:05:24.601Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/f3/64dc3bf13e46c6a09cc1983f66da2e42bf726586fe0f77f915977a6be7d8/microsoft_agents_activity-0.7.0-py3-none-any.whl", hash = "sha256:8d30a25dfd0f491b834be52b4a21ff90ab3b9360ec7e50770c050f1d4a39e5ce", size = 132592, upload-time = "2026-01-21T18:05:33.533Z" },
+]
+
+[[package]]
+name = "microsoft-agents-authentication-msal"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "microsoft-agents-hosting-core" },
+    { name = "msal" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/78/48609247e8c261f54dc3a306a23c4339cae76ab21cd0fb17a295c519d4e9/microsoft_agents_authentication_msal-0.7.0.tar.gz", hash = "sha256:f0a79b9e006a6e759236db5a26a75f9d88f8cb06e4dbe5a331bba57f05b2b990", size = 12767, upload-time = "2026-01-21T18:05:25.5Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/bd/2f8d9d62bd352bbf42f136285ef042f44a9aa7442136fe30de4a38660d03/microsoft_agents_authentication_msal-0.7.0-py3-none-any.whl", hash = "sha256:3412f097b078c5acfaef0eac0d44c3374b21236fd95ea02cbdb8968b949f5933", size = 11799, upload-time = "2026-01-21T18:05:34.784Z" },
 ]
 
 [[package]]

@@ -1,0 +1,1 @@
+agentsplayground -e "http://localhost:3978/api/messages" -c "emulator"

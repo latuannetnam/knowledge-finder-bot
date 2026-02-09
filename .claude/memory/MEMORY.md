@@ -49,15 +49,22 @@
 
 ## Current Phase
 
-- **Status:** ✅ M365 Agents SDK migration complete (commit dbeed4c)
-- **Milestone:** Echo bot functional with M365 Agents SDK v0.7.0
+- **Status:** ✅ M365 Agents SDK migration complete and verified working
+- **Milestone:** Echo bot functional with M365 Agents SDK v0.7.0 + Agent Playground tested
 - **Next:** Implement nlm-proxy integration and Azure AD auth
-- **Tests:** All passing (4/4)
+- **Tests:** All passing (2/2 bot tests, working with Agent Playground)
 
 **Recent Completion:**
-- Migrated from Bot Framework SDK → M365 Agents SDK
-- Updated: pyproject.toml, bot.py, main.py, tests
-- Pattern: ActivityHandler class → AgentApplication decorators
+- ✅ Migrated from Bot Framework SDK → M365 Agents SDK
+- ✅ Fixed authentication using official Microsoft pattern
+- ✅ Added `microsoft-agents-authentication-msal` package
+- ✅ Verified working with Agent Playground
+
+**Critical Discovery - Authentication Fix:**
+- M365 Agents SDK requires specific env var format: `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__*`
+- Must use `MsalConnectionManager` from `microsoft-agents-authentication-msal`
+- Must use `load_configuration_from_env()` to load SDK config
+- Pattern from: [github.com/microsoft/Agents](https://github.com/microsoft/Agents)
 
 **🔄 Update this section when:**
 - Starting a new task

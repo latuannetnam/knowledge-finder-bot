@@ -1,12 +1,17 @@
 """Application entrypoint - aiohttp server with M365 Agents SDK."""
 
-import sys
+from os import environ
 
 import structlog
-from aiohttp import web
-from microsoft_agents.hosting.aiohttp import CloudAdapter
+from aiohttp.web import Request, Response, Application, run_app
+from microsoft_agents.hosting.aiohttp import (
+    CloudAdapter,
+    start_agent_process,
+    jwt_authorization_middleware,
+)
+from microsoft_agents.hosting.core import AgentApplication
 
-from knowledge_finder_bot.bot import create_agent_app
+from knowledge_finder_bot.bot import AGENT_APP, CONNECTION_MANAGER
 from knowledge_finder_bot.config import get_settings
 
 # Configure structlog
@@ -31,60 +36,36 @@ structlog.configure(
 logger = structlog.get_logger()
 
 
-async def messages(request: web.Request) -> web.Response:
-    """Handle incoming Bot Framework messages.
-
-    Args:
-        request: The incoming HTTP request from Bot Framework
-
-    Returns:
-        HTTP response from CloudAdapter
-    """
+async def messages(request: Request) -> Response:
+    """Handle incoming Bot Framework messages."""
+    agent: AgentApplication = request.app["agent_app"]
     adapter: CloudAdapter = request.app["adapter"]
-    agent_app = request.app["agent_app"]
-
-    try:
-        response = await adapter.process(request, agent_app)
-        return response or web.Response(status=200)
-    except Exception as e:
-        logger.exception("Error processing activity", error=str(e))
-        return web.Response(status=500)
+    return await start_agent_process(request, agent, adapter)
 
 
-async def health(request: web.Request) -> web.Response:
-    """Health check endpoint.
-
-    Args:
-        request: The incoming HTTP request
-
-    Returns:
-        JSON response with health status
-    """
+async def health(request: Request) -> Response:
+    """Health check endpoint."""
+    from aiohttp import web
     return web.json_response({"status": "healthy"})
 
 
-def create_app() -> web.Application:
+def create_app() -> Application:
     """Create and configure the aiohttp application.
 
     Returns:
         Configured aiohttp Application
     """
-    settings = get_settings()
+    # Create aiohttp app with JWT authorization middleware
+    app = Application(middlewares=[jwt_authorization_middleware])
 
-    # Create M365 Agents SDK adapter
-    adapter = CloudAdapter()
-
-    # Create agent application
-    agent_app = create_agent_app(settings)
-
-    # Create aiohttp app
-    app = web.Application()
-    app["adapter"] = adapter
-    app["agent_app"] = agent_app
-    app["settings"] = settings
+    # Store components for request handlers (following official MS pattern)
+    app["agent_configuration"] = CONNECTION_MANAGER.get_default_connection_configuration()
+    app["agent_app"] = AGENT_APP
+    app["adapter"] = AGENT_APP.adapter
 
     # Add routes
     app.router.add_post("/api/messages", messages)
+    app.router.add_get("/api/messages", lambda _: Response(status=200))
     app.router.add_get("/health", health)
 
     return app
@@ -101,7 +82,7 @@ def main() -> None:
     )
 
     app = create_app()
-    web.run_app(app, host=settings.host, port=settings.port)
+    run_app(app, host=settings.host, port=settings.port)
 
 
 if __name__ == "__main__":

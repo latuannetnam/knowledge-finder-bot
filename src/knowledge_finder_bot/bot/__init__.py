@@ -1,5 +1,10 @@
 """Bot module."""
 
-from knowledge_finder_bot.bot.bot import create_agent_app
+from knowledge_finder_bot.bot.bot import (
+    AGENT_APP,
+    CONNECTION_MANAGER,
+    get_agent_app,
+    get_connection_manager,
+)
 
-__all__ = ["create_agent_app"]
+__all__ = ["AGENT_APP", "CONNECTION_MANAGER", "get_agent_app", "get_connection_manager"]
