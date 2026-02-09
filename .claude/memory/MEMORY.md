@@ -1,0 +1,75 @@
+# Knowledge Finder Bot - Claude Memory
+
+> **Structure:** Modular memory with topic-specific files. Keep this index under 200 lines.
+
+## 🔄 Memory Update Reminder
+
+**⚠️ IMPORTANT: Update this memory after:**
+- ✅ Completing major implementation tasks (new modules, features)
+- ✅ Refactoring code structure (moving files, renaming modules)
+- ✅ Changing architecture (new components, different flows)
+- ✅ Making important decisions (ADRs in decisions.md)
+- ✅ Adding/removing dependencies (update dependencies.md)
+- ✅ Discovering bugs or solutions (update debugging.md)
+- ✅ Establishing new patterns (update patterns.md)
+
+**How to update:**
+1. Identify which topic file(s) need updates
+2. Edit the relevant `.claude/memory/*.md` file(s)
+3. Update "Current Phase" section below if status changed
+4. Commit memory changes with code changes
+
+---
+
+## Project Overview
+
+- **Repo:** `knowledge-finder-bot`
+- **Package:** `knowledge_finder_bot` (Python)
+- **Purpose:** MS Teams/Telegram chatbot for NotebookLM queries via nlm-proxy
+- **Stack:** Python 3.11+, uv, Bot Framework, aiohttp, Pydantic
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Package Manager | `uv` (not pip) |
+| Bot Endpoint | `https://knowledge-finder-bot.nport.io/api/messages` |
+| Local Port | 3978 |
+
+## Topic Files
+
+| File | Description |
+|------|-------------|
+| [project-structure.md](./project-structure.md) | Directory layout, key files |
+| [dependencies.md](./dependencies.md) | Package dependencies, versions |
+| [azure-config.md](./azure-config.md) | Azure Bot, AD, Graph API setup |
+| [patterns.md](./patterns.md) | Code patterns, conventions |
+| [debugging.md](./debugging.md) | Common issues, solutions |
+| [decisions.md](./decisions.md) | Architecture decisions, rationale |
+
+## Current Phase
+
+- **Status:** Planning phase complete, ready for implementation
+- **Next:** Task 1 of basic plan (Project Structure Setup)
+- **Basic Plan:** `docs/plans/2025-02-09-notebooklm-chatbot-basic.md` (6 tasks)
+- **Advanced Plan:** `docs/plans/2025-02-09-notebooklm-chatbot-advanced.md` (placeholder)
+
+**🔄 Update this section when:**
+- Starting a new task
+- Completing a major milestone
+- Changing implementation approach
+
+## Key Decisions
+
+1. **uv over pip** - Faster, better dependency resolution, `[dependency-groups]` syntax
+2. **Nport over ngrok** - Persistent subdomain for free (`knowledge-finder-bot.nport.io`)
+3. **OpenAI SDK first** - Direct nlm-proxy integration, LangGraph later if needed
+4. **App-only Graph API** - No user consent dialogs, simpler auth flow
+
+See [decisions.md](./decisions.md) for full Architecture Decision Records (ADRs).
+
+## Related Docs
+
+- **Developer Guide:** `CLAUDE.md` (root) - Commands, architecture, components
+- **Design:** `docs/plans/notebooklm-chatbot-design.md`
+- **Azure Setup:** `docs/plans/azure-app-registration-guide.md`
