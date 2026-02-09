@@ -77,27 +77,34 @@ User (Teams/Telegram) → Azure Bot Service → Bot Backend (aiohttp:3978)
 | Component | File | Responsibility |
 |-----------|------|----------------|
 | **Server** | `src/knowledge_finder_bot/main.py` | aiohttp app, `/api/messages`, `/health` |
-| **Bot Handler** | `src/knowledge_finder_bot/bot/bot.py` | `NotebookLMBot(ActivityHandler)` |
+| **Bot Handler** | `src/knowledge_finder_bot/bot/bot.py` | `create_agent_app()` - M365 Agents SDK |
 | **Config** | `src/knowledge_finder_bot/config.py` | Pydantic settings from env vars |
 | **Auth** | `src/knowledge_finder_bot/auth/` | Azure AD validation, Graph API |
 | **ACL** | `src/knowledge_finder_bot/acl/` | Group → notebook mapping |
 | **nlm-proxy** | `src/knowledge_finder_bot/nlm/` | OpenAI SDK client wrapper |
 | **Channels** | `src/knowledge_finder_bot/channels/` | Teams/Telegram formatters |
 
-## Bot Framework Pattern
+## M365 Agents SDK Pattern
 
-The bot extends `ActivityHandler` and overrides event handlers:
+The bot uses decorator-based handlers with `AgentApplication`:
 
 ```python
-class NotebookLMBot(ActivityHandler):
-    async def on_message_activity(self, turn_context: TurnContext):
+def create_agent_app(settings: Settings) -> AgentApplication[TurnState]:
+    options = ApplicationOptions(storage=MemoryStorage())
+    app = AgentApplication(options)
+
+    @app.message(re.compile(r".*"))
+    async def on_message(context: TurnContext, state: TurnState):
         # Handle user messages
 
-    async def on_members_added_activity(self, members_added, turn_context):
+    @app.conversation_update(ConversationUpdateTypes.MEMBERS_ADDED)
+    async def on_members_added(context: TurnContext, state: TurnState):
         # Welcome new users
+
+    return app
 ```
 
-All I/O is async. Use `await` for Bot Framework and Graph API calls.
+All I/O is async. Use `await` for M365 Agents SDK and Graph API calls.
 
 ## Testing
 
@@ -120,6 +127,14 @@ Environment variables in `.env` (never commit):
 ## Implementation Plans
 
 Detailed step-by-step guides:
+- **Migration:** `docs/plans/2025-02-09-m365-agents-migration-plan.md` ✅ Completed (commit dbeed4c)
 - **Basic (echo bot):** `docs/plans/2025-02-09-notebooklm-chatbot-basic.md`
 - **Advanced (full features):** `docs/plans/2025-02-09-notebooklm-chatbot-advanced.md`
 - **Full design:** `docs/plans/notebooklm-chatbot-design.md`
+
+## Migration Status
+
+**✅ M365 Agents SDK Migration Complete** (commit: `dbeed4c`)
+- Migrated from Bot Framework SDK to M365 Agents SDK v0.7.0
+- All tests passing (4/4)
+- Echo bot functional with decorator-based handlers
