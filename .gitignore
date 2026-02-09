@@ -208,3 +208,6 @@ __marimo__/
 
 #Clause
 .claude/settings.local.json
+
+# Git worktrees
+.worktrees/
