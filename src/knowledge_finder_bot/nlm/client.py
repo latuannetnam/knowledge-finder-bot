@@ -1,10 +1,12 @@
 """Client for nlm-proxy OpenAI-compatible API."""
 
+from collections.abc import AsyncGenerator
+
 import structlog
 from openai import AsyncOpenAI
 
 from knowledge_finder_bot.config import Settings
-from knowledge_finder_bot.nlm.models import NLMResponse
+from knowledge_finder_bot.nlm.models import NLMChunk, NLMResponse
 
 logger = structlog.get_logger()
 
@@ -64,6 +66,69 @@ class NLMClient:
         except Exception:
             logger.error("nlm_query_error", model=self._model)
             raise
+
+    async def query_stream(
+        self,
+        user_message: str,
+        allowed_notebooks: list[str],
+        conversation_id: str | None = None,
+    ) -> AsyncGenerator[NLMChunk, None]:
+        """Stream nlm-proxy response as individual chunks.
+
+        Yields NLMChunk objects as they arrive from the SSE stream.
+        The caller is responsible for accumulating text.
+        """
+        extra_body: dict = {"metadata": {"allowed_notebooks": allowed_notebooks}}
+        if conversation_id:
+            extra_body["conversation_id"] = conversation_id
+
+        logger.info(
+            "nlm_stream_start",
+            model=self._model,
+            notebook_count=len(allowed_notebooks),
+            has_conversation_id=conversation_id is not None,
+        )
+
+        stream = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": user_message}],
+            stream=True,
+            extra_body=extra_body,
+        )
+
+        model_emitted = False
+
+        async for chunk in stream:
+            chunk_model = chunk.model if chunk.model else None
+            sys_fp = chunk.system_fingerprint
+            parsed_conv_id = _parse_conversation_id(sys_fp) if sys_fp else None
+
+            if (chunk_model and not model_emitted) or parsed_conv_id:
+                yield NLMChunk(
+                    chunk_type="meta",
+                    model=chunk_model if not model_emitted else None,
+                    conversation_id=parsed_conv_id,
+                )
+                if chunk_model:
+                    model_emitted = True
+
+            for choice in chunk.choices:
+                delta = choice.delta
+
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
+                    yield NLMChunk(chunk_type="reasoning", text=reasoning)
+
+                if delta.content:
+                    yield NLMChunk(chunk_type="content", text=delta.content)
+
+                if choice.finish_reason:
+                    yield NLMChunk(
+                        chunk_type="meta",
+                        finish_reason=choice.finish_reason,
+                    )
+
+        logger.info("nlm_stream_complete", model=self._model)
 
     async def _query_streaming(
         self, user_message: str, extra_body: dict
