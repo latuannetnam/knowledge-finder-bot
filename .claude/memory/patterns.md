@@ -1,5 +1,21 @@
 # Code Patterns & Conventions
 
+## 📝 Documentation as Code
+
+**ALWAYS update documentation when code changes.** Treat documentation updates as part of the implementation.
+
+### Documentation Update Rules
+
+1. **Feature Addition**: Update `docs/architecture.md` + `CLAUDE.md` components table
+2. **Dependency Change**: Update `.claude/memory/dependencies.md` + `docs/setup.md` if prerequisites change
+3. **Config Change**: Update `docs/setup.md` environment variables section
+4. **Pattern Change**: Update this file (`.claude/memory/patterns.md`)
+5. **Bug Fix**: Document in `.claude/memory/debugging.md` if it's a common issue
+
+**Before completing ANY task, ask: "What documentation needs updating?"**
+
+---
+
 ## Naming Conventions
 
 | Type | Convention | Example |

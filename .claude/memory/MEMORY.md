@@ -33,7 +33,10 @@
 | Item | Value |
 |------|-------|
 | Package Manager | `uv` (not pip) |
-| Bot Endpoint | `https://knowledge-finder-bot.nport.io/api/messages` |
+| Run Commands | `uv run python -m knowledge_finder_bot.main` |
+| Test Commands | `uv run pytest tests/ -v` |
+| Tunnel Tool | devtunnel (`.\run_devtunnel.ps1`) |
+| Local Testing | Agent Playground (`.\run_agentplayground.ps1`) |
 | Local Port | 3978 |
 
 ## Topic Files
@@ -75,11 +78,34 @@
 
 1. **M365 Agents SDK over Bot Framework** - Bot Framework SDK EOL Dec 31, 2025 (completed)
 2. **uv over pip** - Faster, better dependency resolution, `[dependency-groups]` syntax
-3. **Nport over ngrok** - Persistent subdomain for free (`knowledge-finder-bot.nport.io`)
-4. **OpenAI SDK first** - Direct nlm-proxy integration, LangGraph later if needed
-5. **App-only Graph API** - No user consent dialogs, simpler auth flow
+3. **devtunnel for development** - Microsoft-native tunneling, integrates with Azure
+4. **Agent Playground for testing** - Official M365 tool, better than Bot Framework Emulator
+5. **OpenAI SDK first** - Direct nlm-proxy integration, LangGraph later if needed
+6. **App-only Graph API** - No user consent dialogs, simpler auth flow
 
 See [decisions.md](./decisions.md) for full Architecture Decision Records (ADRs).
+
+## Commands Cheatsheet
+
+```bash
+# Setup
+uv sync
+
+# Run bot
+uv run python -m knowledge_finder_bot.main
+
+# Run tests
+uv run pytest tests/ -v
+
+# Start devtunnel (saves endpoint to .devtunnel-endpoint)
+.\run_devtunnel.ps1
+
+# Test with Agent Playground (auto-detects devtunnel endpoint)
+.\run_agentplayground.ps1
+
+# Health check
+curl http://localhost:3978/health
+```
 
 ## Related Docs
 

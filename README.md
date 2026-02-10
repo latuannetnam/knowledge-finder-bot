@@ -1,69 +1,55 @@
-# NotebookLM Chatbot
+# Knowledge Finder Bot
 
-MS Teams and Telegram chatbot for querying NotebookLM notebooks via nlm-proxy.
+**A Microsoft Teams & Telegram chatbot that answers questions using Google's NotebookLM.**
 
-## Status
+[![Status](https://img.shields.io/badge/Status-Migration_Complete-success)](./docs/architecture.md)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](./pyproject.toml)
 
-**Current:** Echo bot implementation (Phase 1)
+This bot allows users to query curated knowledge bases (NotebookLM notebooks) directly from their chat interface. It handles authentication, access control via Azure AD groups, and routes queries to the appropriate notebook.
 
-## Quick Start
+## 🚀 Quick Links
 
-### Prerequisites
+- **[Setup Guide](./docs/setup.md)** - Installation and local development.
+- **[Architecture](./docs/architecture.md)** - System design and components.
+- **[Contributing](./docs/contributing.md)** - Coding standards and testing.
+- **[Deployment](./docs/deployment.md)** - Azure configuration and hosting.
 
-- Python 3.11+
-- Azure Bot registration (for Teams deployment)
-- Bot Framework Emulator (for local testing)
-
-### Development Setup
-
-**Windows:**
-```powershell
-.\scripts\dev-setup.ps1
-```
-
-**Unix/Mac:**
-```bash
-chmod +x scripts/dev-setup.sh
-./scripts/dev-setup.sh
-```
-
-### Running Locally
-
-1. Edit `.env` with your Azure Bot credentials
-2. Start the bot:
-   ```bash
-   python -m knowledge_finder_bot.main
-   ```
-3. Open Bot Framework Emulator
-4. Connect to `http://localhost:3978/api/messages`
-
-### Running Tests
+## ⚡ Quick Start
 
 ```bash
-pytest tests/ -v
+# 1. Install dependencies
+uv sync
+
+# 2. Run the bot
+uv run python -m knowledge_finder_bot.main
+
+# 3. Run tests
+uv run pytest tests/ -v
 ```
 
-## Project Structure
+## Project Status
+
+**Current Phase: M365 Agents SDK Migration (Completed)**
+The bot has been successfully migrated to the new Microsoft 365 Agents SDK and is currently functioning as an **Echo Bot**. The core infrastructure (auth, config, logging) is in place.
+
+**Next Steps:**
+- Implement `nlm-proxy` integration.
+- Implement Azure AD Group ACLs.
+
+## Repository Structure
 
 ```
-nlm-chatbot/
-├── src/knowledge_finder_bot/
-│   ├── __init__.py
-│   ├── config.py          # Pydantic settings
-│   ├── main.py            # Application entrypoint
-│   └── bot/
-│       ├── __init__.py
-│       └── bot.py         # Bot implementation
-├── tests/
-│   ├── conftest.py        # Test fixtures
-│   ├── test_config.py     # Config tests
-│   └── test_bot.py        # Bot tests
-├── scripts/
-│   ├── dev-setup.ps1      # Windows setup
-│   └── dev-setup.sh       # Unix setup
-├── pyproject.toml
-├── .env.example
-└── README.md
+knowledge-finder-bot/
+├── docs/                   # Documentation
+├── src/                    # Source code
+│   └── knowledge_finder_bot/
+│       ├── bot/            # Bot logic (Agents SDK)
+│       ├── config.py       # Configuration
+│       └── main.py         # Entry point
+├── tests/                  # Unit tests
+├── scripts/                # Utility scripts
+├── pyproject.toml          # Dependencies (uv)
+└── README.md               # This file
 ```
 
 ## License

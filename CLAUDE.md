@@ -6,6 +6,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This project uses `.claude/memory/` for detailed context. Read [MEMORY.md](.claude/memory/MEMORY.md) for project overview, then drill into specific topics as needed.
 
+## 📚 Documentation Maintenance
+
+**CRITICAL: Always update Just-in-Time documentation after completing tasks.**
+
+### When to Update Documentation
+
+Update docs **immediately after**:
+- ✅ Adding new features or modules
+- ✅ Refactoring code structure (moving files, renaming modules)
+- ✅ Changing architecture or data flow
+- ✅ Adding/removing/updating dependencies
+- ✅ Modifying environment variables or configuration
+- ✅ Discovering bugs or creating solutions
+- ✅ Establishing new coding patterns
+- ✅ Changing development workflow or tooling
+
+### What to Update
+
+| Change Type | Files to Update |
+|-------------|-----------------|
+| **New Feature/Module** | `docs/architecture.md`, `CLAUDE.md` (components), `.claude/memory/project-structure.md` |
+| **Dependencies** | `.claude/memory/dependencies.md`, `docs/setup.md` (if prerequisites change) |
+| **Environment Variables** | `docs/setup.md`, `CLAUDE.md` (if critical), `.env.example` |
+| **Code Patterns** | `.claude/memory/patterns.md` |
+| **Bug Fixes/Solutions** | `.claude/memory/debugging.md` |
+| **Architecture Changes** | `docs/architecture.md`, `CLAUDE.md` (architecture section) |
+| **Development Tools** | `docs/setup.md`, `.claude/memory/MEMORY.md` (quick reference) |
+| **Important Decisions** | `.claude/memory/decisions.md` |
+
+### Documentation Update Checklist
+
+Before marking a task complete:
+1. ✅ Identify what changed (feature, architecture, config, etc.)
+2. ✅ Update relevant documentation files from table above
+3. ✅ Update `.claude/memory/MEMORY.md` "Current Phase" if milestone reached
+4. ✅ Verify code examples in docs still work
+5. ✅ Update README.md if user-facing changes
+6. ✅ Commit documentation updates WITH code changes
+
+**Remember:** Documentation is code. Outdated docs are worse than no docs.
+
 ## Code Patterns & Standards
 
 **Logging (Critical):**
@@ -32,8 +73,11 @@ uv run pytest tests/test_bot.py -v
 # Run specific test
 uv run pytest tests/test_bot.py::test_on_message_activity_echoes_message -v
 
-# Start tunnel for Teams testing
-nport 3978 -s knowledge-finder-bot
+# Start devtunnel (for Azure Bot Service integration)
+.\run_devtunnel.ps1
+
+# Test bot locally with Agent Playground
+.\run_agentplayground.ps1
 
 # Health check
 curl http://localhost:3978/health

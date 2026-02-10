@@ -6,9 +6,9 @@
 
 | Symptom | Cause | Solution |
 |---------|-------|----------|
-| No response in Emulator | Bot not running | `uv run python -m knowledge_finder_bot.main` |
+| No response in Agent Playground | Bot not running | `uv run python -m knowledge_finder_bot.main` |
 | "Cannot connect" | Wrong port | Ensure port 3978, check `/health` endpoint |
-| "Unauthorized" in Emulator | App ID set | Leave App ID/Password empty for local testing |
+| "Unauthorized" in Agent Playground | Wrong endpoint | Use `.\run_agentplayground.ps1` to auto-detect devtunnel endpoint |
 
 ### Teams Integration Issues
 
@@ -16,8 +16,8 @@
 |---------|-------|----------|
 | "401 Unauthorized" | Wrong credentials | Verify `MICROSOFT_APP_ID` matches Azure Portal |
 | "502 Bad Gateway" | Bot crashed | Check terminal for Python errors |
-| No messages received | Tunnel not running | Start `nport 3978 -s knowledge-finder-bot` |
-| URL not reachable | Nport disconnected | Restart Nport tunnel |
+| No messages received | Tunnel not running | Run `.\run_devtunnel.ps1` |
+| URL not reachable | devtunnel disconnected | Restart devtunnel, check `.devtunnel-endpoint` file |
 
 ### Dependency Issues
 
@@ -37,8 +37,15 @@ curl http://localhost:3978/health
 netstat -an | findstr 3978  # Windows
 lsof -i :3978               # Unix
 
-# Test Nport tunnel
-curl https://knowledge-finder-bot.nport.io/health
+# Check devtunnel endpoint
+Get-Content .devtunnel-endpoint  # PowerShell
+type .devtunnel-endpoint         # CMD
+
+# List devtunnels
+devtunnel list
+
+# Show tunnel status
+devtunnel show knowledge-finder-bot
 
 # Verbose pytest
 uv run pytest tests/ -v --tb=long
