@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This project uses `.claude/memory/` for detailed context. Read [MEMORY.md](.claude/memory/MEMORY.md) for project overview, then drill into specific topics as needed.
 
+## Code Patterns & Standards
+
+**Logging (Critical):**
+- Use `structlog` exclusively.
+- **Pattern:** `logger.info("event_name", key=value, status="active")`
+- **NEVER** use f-strings in log messages: `logger.info(f"User {id}")` ❌
+- See [patterns.md](.claude/memory/patterns.md) for details.
+
 ## Development Commands
 
 ```bash

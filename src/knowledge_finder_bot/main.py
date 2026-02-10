@@ -1,5 +1,6 @@
 """Application entrypoint - aiohttp server with M365 Agents SDK."""
 
+import logging
 from os import environ
 
 import structlog
@@ -14,24 +15,38 @@ from microsoft_agents.hosting.core import AgentApplication
 from knowledge_finder_bot.bot import AGENT_APP, CONNECTION_MANAGER
 from knowledge_finder_bot.config import get_settings
 
-# Configure structlog
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.dev.ConsoleRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
-)
+
+def configure_logging(log_level: str = "INFO") -> None:
+    """Configure structlog and standard library logging.
+
+    Args:
+        log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    # Configure Python's standard library logging
+    logging.basicConfig(
+        format="%(message)s",
+        level=getattr(logging, log_level.upper(), logging.INFO),
+    )
+
+    # Configure structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
 
 logger = structlog.get_logger()
 
@@ -75,10 +90,14 @@ def main() -> None:
     """Run the bot server."""
     settings = get_settings()
 
+    # Configure logging with level from settings
+    configure_logging(settings.log_level)
+
     logger.info(
         "starting_bot_server",
         host=settings.host,
         port=settings.port,
+        log_level=settings.log_level,
     )
 
     app = create_app()
