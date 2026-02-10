@@ -252,7 +252,6 @@ Detailed step-by-step guides:
 - **Migration:** `docs/plans/2025-02-09-m365-agents-migration-plan.md` ✅ Completed (commit dbeed4c)
 - **ACL Mechanism:** `docs/plans/2025-02-10-acl-mechanism.md` ✅ Completed (commits 5206eed → cf59c42)
 - **Basic (echo bot):** `docs/plans/2025-02-09-notebooklm-chatbot-basic.md`
-- **Advanced (full features):** `docs/plans/2025-02-09-notebooklm-chatbot-advanced.md`
 - **Full design:** `docs/docs\plans\notebooklm-chatbot-design-v2-fixed.md`
 
 ## Implementation Status
