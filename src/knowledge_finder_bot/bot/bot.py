@@ -18,14 +18,15 @@ from microsoft_agents.hosting.core import (
 )
 from microsoft_agents.authentication.msal import MsalConnectionManager
 from microsoft_agents.activity import (
-    Activity, ActivityTypes, ConversationUpdateTypes, load_configuration_from_env,
+    ConversationUpdateTypes, load_configuration_from_env,
 )
+from microsoft_agents.hosting.aiohttp.app.streaming.streaming_response import StreamingResponse
 
 from knowledge_finder_bot.acl.service import ACLService
 from knowledge_finder_bot.auth.graph_client import GraphClient, UserInfo
 from knowledge_finder_bot.config import Settings
 from knowledge_finder_bot.nlm.client import NLMClient
-from knowledge_finder_bot.nlm.formatter import format_response
+from knowledge_finder_bot.nlm.formatter import format_response, format_source_attribution
 from knowledge_finder_bot.nlm.session import SessionStore
 
 logger = structlog.get_logger()
@@ -201,27 +202,67 @@ def create_agent_app(
             )
             return
 
-        # Send typing indicator
-        await context.send_activity(Activity(type=ActivityTypes.typing))
+        # --- Streaming nlm-proxy query ---
+        streaming = StreamingResponse(context)
+        streaming.set_generated_by_ai_label(True)
 
-        # Multi-turn: retrieve existing conversation_id
         conversation_id = session_store.get(aad_object_id) if session_store else None
+        notebook_id = None
+        new_conversation_id = None
+        sent_separator = False
 
         try:
-            nlm_response = await nlm_client.query(
+            async for chunk in nlm_client.query_stream(
                 user_message=user_message,
                 allowed_notebooks=list(allowed_notebooks),
                 conversation_id=conversation_id,
-            )
-            # Store for next turn
-            if nlm_response.conversation_id and session_store:
-                session_store.set(aad_object_id, nlm_response.conversation_id)
+            ):
+                if chunk.chunk_type == "meta":
+                    if chunk.model and notebook_id is None:
+                        notebook_id = chunk.model
+                        nb_name = acl_service.get_notebook_name(notebook_id)
+                        if nb_name:
+                            streaming.queue_informative_update(
+                                f"Searching {nb_name}..."
+                            )
+                    if chunk.conversation_id:
+                        new_conversation_id = chunk.conversation_id
 
-            formatted = format_response(nlm_response, acl_service)
-            await context.send_activity(formatted)
+                elif chunk.chunk_type == "reasoning":
+                    streaming.queue_text_chunk(chunk.text)
+
+                elif chunk.chunk_type == "content":
+                    if not sent_separator:
+                        streaming.queue_text_chunk("\n\n---\n\n")
+                        sent_separator = True
+                    streaming.queue_text_chunk(chunk.text)
+
+            source_line = format_source_attribution(notebook_id, acl_service)
+            if source_line:
+                streaming.queue_text_chunk(source_line)
+
+            await streaming.end_stream()
+
+            if new_conversation_id and session_store:
+                session_store.set(aad_object_id, new_conversation_id)
+
+            logger.info(
+                "nlm_stream_delivered",
+                notebook_id=notebook_id,
+                conversation_id=new_conversation_id,
+            )
+
         except Exception as e:
-            logger.error("nlm_query_failed", error=str(e))
-            await context.send_activity("I encountered an error. Please try again.")
+            logger.error("nlm_stream_failed", error=str(e))
+            try:
+                streaming.queue_text_chunk(
+                    "I encountered an error. Please try again."
+                )
+                await streaming.end_stream()
+            except Exception:
+                await context.send_activity(
+                    "I encountered an error. Please try again."
+                )
 
     @agent_app.error
     async def on_error(context: TurnContext, error: Exception):
