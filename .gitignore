@@ -211,3 +211,6 @@ __marimo__/
 
 # Git worktrees
 .worktrees/
+
+#Others
+.devtunnel-endpoint
