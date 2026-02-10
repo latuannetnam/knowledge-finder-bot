@@ -17,7 +17,7 @@ from microsoft_agents.hosting.core import (
     MemoryStorage,
 )
 from microsoft_agents.authentication.msal import MsalConnectionManager
-from microsoft_agents.activity import load_configuration_from_env
+from microsoft_agents.activity import ConversationUpdateTypes, load_configuration_from_env
 
 from knowledge_finder_bot.config import Settings
 
@@ -27,7 +27,7 @@ logger = structlog.get_logger()
 load_dotenv()
 
 # Load SDK configuration from environment
-agents_sdk_config = load_configuration_from_env(environ)
+agents_sdk_config = load_configuration_from_env(dict(environ))
 
 # Create core components following official Microsoft pattern
 STORAGE = MemoryStorage()
@@ -44,8 +44,8 @@ AGENT_APP = AgentApplication[TurnState](
 )
 
 
-@AGENT_APP.conversation_update("membersAdded")
-async def on_members_added(context: TurnContext, _state: TurnState):
+@AGENT_APP.conversation_update(ConversationUpdateTypes.MEMBERS_ADDED)
+async def on_members_added(context: TurnContext, state: TurnState):
     """Welcome new users to the conversation."""
     for member in context.activity.members_added or []:
         if member.id != context.activity.recipient.id:
@@ -54,11 +54,10 @@ async def on_members_added(context: TurnContext, _state: TurnState):
                 "Currently running in **echo mode** for testing.\n"
                 "Send me a message and I'll echo it back!"
             )
-    return True
 
 
 @AGENT_APP.message(re.compile(r".*"))
-async def on_message(context: TurnContext, _state: TurnState):
+async def on_message(context: TurnContext, state: TurnState):
     """Handle incoming messages by echoing them back."""
     user_message = context.activity.text
     user_name = context.activity.from_property.name or "User"

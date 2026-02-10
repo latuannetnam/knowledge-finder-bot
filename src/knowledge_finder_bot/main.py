@@ -55,13 +55,19 @@ async def messages(request: Request) -> Response:
     """Handle incoming Bot Framework messages."""
     agent: AgentApplication = request.app["agent_app"]
     adapter: CloudAdapter = request.app["adapter"]
-    return await start_agent_process(request, agent, adapter)
+    response = await start_agent_process(request, agent, adapter)
+    return response if response is not None else Response(status=202)
 
 
 async def health(request: Request) -> Response:
     """Health check endpoint."""
     from aiohttp import web
     return web.json_response({"status": "healthy"})
+
+
+async def messages_health(request: Request) -> Response:
+    """Health check for messages endpoint."""
+    return Response(status=200)
 
 
 def create_app() -> Application:
@@ -80,7 +86,7 @@ def create_app() -> Application:
 
     # Add routes
     app.router.add_post("/api/messages", messages)
-    app.router.add_get("/api/messages", lambda _: Response(status=200))
+    app.router.add_get("/api/messages", messages_health)
     app.router.add_get("/health", health)
 
     return app

@@ -1,6 +1,6 @@
 # Planning
-- [ ] Structure logging system
 - [ ] Check Graph API permission
-- [ ] Documentation: README.md and related files
 
 # Done
+- [Done] Structure logging system
+- [Done] Documentation: README.md and related files
