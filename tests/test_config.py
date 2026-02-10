@@ -17,3 +17,10 @@ def test_settings_has_defaults(settings: Settings):
     assert settings.host == "127.0.0.1"
     assert settings.port == 3978
     assert settings.log_level == "DEBUG"
+
+
+def test_settings_has_acl_defaults(settings: Settings):
+    """Test that ACL settings have correct defaults."""
+    assert settings.acl_config_path == "config/acl.yaml"
+    assert settings.graph_cache_ttl == 300
+    assert settings.graph_cache_maxsize == 1000

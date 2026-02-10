@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     graph_client_id: str = Field(..., alias="GRAPH_CLIENT_ID")
     graph_client_secret: str = Field(..., alias="GRAPH_CLIENT_SECRET")
 
+    # ACL
+    acl_config_path: str = Field("config/acl.yaml", alias="ACL_CONFIG_PATH")
+
+    # Graph API cache
+    graph_cache_ttl: int = Field(300, alias="GRAPH_CACHE_TTL")
+    graph_cache_maxsize: int = Field(1000, alias="GRAPH_CACHE_MAXSIZE")
+
     # Server
     host: str = Field("0.0.0.0", alias="HOST")
     port: int = Field(3978, alias="PORT")
