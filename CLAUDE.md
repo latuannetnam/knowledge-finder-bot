@@ -237,17 +237,30 @@ Environment variables in `.env` (never commit):
 - `MICROSOFT_APP_ID`, `MICROSOFT_APP_PASSWORD`, `MICROSOFT_APP_TENANT_ID`
 - `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`
 
+**ACL Configuration (optional):**
+- `ACL_CONFIG_PATH` (default: `config/acl.yaml`)
+- `GRAPH_CACHE_TTL` (default: `300` seconds)
+- `GRAPH_CACHE_MAXSIZE` (default: `1000` users)
+
 ## Implementation Plans
 
 Detailed step-by-step guides:
 - **Migration:** `docs/plans/2025-02-09-m365-agents-migration-plan.md` ✅ Completed (commit dbeed4c)
+- **ACL Mechanism:** `docs/plans/2025-02-10-acl-mechanism.md` ✅ Completed (commits 5206eed → cf59c42)
 - **Basic (echo bot):** `docs/plans/2025-02-09-notebooklm-chatbot-basic.md`
 - **Advanced (full features):** `docs/plans/2025-02-09-notebooklm-chatbot-advanced.md`
-- **Full design:** `docs/plans/notebooklm-chatbot-design.md`
+- **Full design:** `docs/docs\plans\notebooklm-chatbot-design-v2-fixed.md`
 
-## Migration Status
+## Implementation Status
 
 **✅ M365 Agents SDK Migration Complete** (commit: `dbeed4c`)
 - Migrated from Bot Framework SDK to M365 Agents SDK v0.7.0
 - All tests passing (4/4)
 - Echo bot functional with decorator-based handlers
+
+**✅ ACL Mechanism Complete** (commits: `5206eed` → `cf59c42`)
+- Graph API client with app-only authentication (8/8 tests)
+- ACL service with YAML-based access control (14/14 tests)
+- Pydantic models with GUID validation (11/11 tests)
+- Bot handler with ACL enforcement and graceful fallback (6/6 tests)
+- Total: 42/42 tests passing, 77% code coverage
