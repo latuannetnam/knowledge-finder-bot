@@ -7,14 +7,19 @@
 requires-python = ">=3.11"
 
 dependencies = [
-    "botbuilder-core>=4.14.0",
-    "botbuilder-integration-aiohttp>=4.14.0",
+    "microsoft-agents-hosting-core",     # M365 Agents SDK
+    "microsoft-agents-hosting-aiohttp",
+    "microsoft-agents-activity",
+    "microsoft-agents-authentication-msal",
     "aiohttp>=3.9.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
     "structlog>=23.0.0",
     "msal>=1.24.0",
+    "httpx>=0.25.0",      # ✅ Graph API client (added for ACL)
+    "pyyaml>=6.0",        # ✅ ACL YAML config (added for ACL)
+    "cachetools>=5.3.0",  # ✅ User info caching (added for ACL)
 ]
 ```
 
@@ -31,14 +36,32 @@ dev = [
 ]
 ```
 
-## Future Dependencies (Advanced Phase)
+## Implementation Status
 
-| Package | Purpose | When to Add |
-|---------|---------|-------------|
-| `openai>=1.0.0` | nlm-proxy client | Phase 4 |
-| `msgraph-sdk>=1.0.0` | Graph API | Phase 2 |
-| `redis>=5.0.0` | ACL caching | Phase 3 |
-| `pyyaml>=6.0.0` | ACL config | Phase 3 |
+| Package | Purpose | Status |
+|---------|---------|--------|
+| `httpx>=0.25.0` | Graph API HTTP client | ✅ Implemented (ACL phase) |
+| `pyyaml>=6.0` | ACL YAML config | ✅ Implemented (ACL phase) |
+| `cachetools>=5.3.0` | User info caching | ✅ Implemented (ACL phase) |
+| `openai>=1.0.0` | nlm-proxy client | ⏳ TODO (next phase) |
+| `redis>=5.0.0` | Persistent caching | ⏳ Future (optional) |
+
+## ACL Dependencies Details
+
+**httpx** - Async HTTP client for Microsoft Graph API
+- Used in: `auth/graph_client.py`
+- Replaces: msgraph-sdk (lighter, more flexible)
+- Features: Pagination, timeout handling, connection pooling
+
+**pyyaml** - YAML parser for ACL configuration
+- Used in: `acl/service.py`
+- Config file: `config/acl.yaml`
+- Hot-reload support via `reload_config()`
+
+**cachetools** - In-memory caching
+- Used in: `bot/bot.py`
+- Cache type: TTLCache (5-min TTL, 1000 users)
+- Reduces Graph API calls by ~95%
 
 ## Package Manager
 
