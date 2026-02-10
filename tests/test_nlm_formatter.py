@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from knowledge_finder_bot.nlm.formatter import format_response
+from knowledge_finder_bot.nlm.formatter import format_response, format_source_attribution
 from knowledge_finder_bot.nlm.models import NLMResponse
 
 
@@ -71,3 +71,34 @@ def test_format_with_no_reasoning():
     result = format_response(response, acl_service)
     assert result == "Answer text."
     assert "Source" not in result
+
+
+def test_format_source_attribution_known_notebook():
+    """Returns formatted source line for known notebook ID."""
+    acl_service = MagicMock()
+    acl_service.get_notebook_name.return_value = "HR Docs"
+
+    result = format_source_attribution("hr-notebook", acl_service)
+    assert result == "\n---\n*Source: HR Docs*"
+
+
+def test_format_source_attribution_unknown_notebook():
+    """Returns None when notebook ID not recognized."""
+    acl_service = MagicMock()
+    acl_service.get_notebook_name.return_value = None
+
+    result = format_source_attribution("unknown-id", acl_service)
+    assert result is None
+
+
+def test_format_source_attribution_no_acl():
+    """Returns None when acl_service is None."""
+    result = format_source_attribution("hr-notebook", acl_service=None)
+    assert result is None
+
+
+def test_format_source_attribution_no_notebook_id():
+    """Returns None when notebook_id is None."""
+    acl_service = MagicMock()
+    result = format_source_attribution(None, acl_service)
+    assert result is None

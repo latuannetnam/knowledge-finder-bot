@@ -23,3 +23,15 @@ def format_response(response: NLMResponse, acl_service: ACLService | None = None
             parts.append(f"\n---\n*Source: {notebook_name}*")
 
     return "".join(parts)
+
+
+def format_source_attribution(
+    notebook_id: str | None,
+    acl_service: ACLService | None = None,
+) -> str | None:
+    """Return source attribution line for a notebook, or None."""
+    if notebook_id and acl_service:
+        notebook_name = acl_service.get_notebook_name(notebook_id)
+        if notebook_name:
+            return f"\n---\n*Source: {notebook_name}*"
+    return None
