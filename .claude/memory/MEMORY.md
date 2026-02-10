@@ -52,10 +52,10 @@
 
 ## Current Phase
 
-- **Status:** ✅ nlm-proxy integration complete
-- **Milestone:** Full bot implementation with ACL + nlm-proxy queries
-- **Next:** Manual E2E testing + documentation updates
-- **Tests:** All passing (72/72 tests, 77% code coverage)
+- **Status:** ✅ End-to-end streaming complete
+- **Milestone:** Real-time streaming from nlm-proxy to users via M365 StreamingResponse
+- **Next:** Manual E2E testing with Agent Playground + production deployment
+- **Tests:** All passing (87/87 tests)
 
 **Recent Completion:**
 - ✅ M365 Agents SDK migration (v0.7.0)

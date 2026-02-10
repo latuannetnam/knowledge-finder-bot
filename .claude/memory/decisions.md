@@ -197,6 +197,54 @@ Record significant architecture decisions with rationale.
 
 ---
 
+### ADR-010: End-to-End Streaming with M365 StreamingResponse
+
+**Date:** 2025-02-10
+
+**Decision:** Implement real-time streaming from nlm-proxy to users via M365 Agents SDK `StreamingResponse` instead of buffering the entire response.
+
+**Rationale:**
+- **User Experience:** Users see thinking process and answer as it arrives (no 5-30 second blocking wait)
+- **Transparency:** Reasoning visible in real-time, source attribution clear
+- **Status Updates:** Informative updates show which notebook is being searched
+- **Channel Agnostic:** Works on Teams, DirectLine, and non-streaming channels with same code
+- **M365 SDK Native:** `StreamingResponse` handles batching and channel-specific intervals automatically
+- **Performance:** Reduces perceived latency by showing progress immediately
+
+**Implementation:**
+- Created `NLMChunk` dataclass for streaming chunks (`reasoning`, `content`, `meta`)
+- Implemented `query_stream()` AsyncGenerator on `NLMClient` that yields chunks in real-time
+- Added `format_source_attribution()` helper for streaming use case
+- Rewrote bot handler to use `StreamingResponse`:
+  - `queue_informative_update()` for notebook name status
+  - `queue_text_chunk()` for reasoning, separator, content, and source attribution
+  - `await end_stream()` to finalize message
+- Session management preserves conversation ID for multi-turn
+
+**Consequences:**
+- Added 15 new tests (9 streaming + 4 formatter + 2 model) - total: 87/87 passing
+- Removed `Activity` and `ActivityTypes` imports (no longer needed)
+- Backward compatible: echo fallback when nlm_client=None still works
+- Non-streaming channels accumulate chunks and send once (handled by SDK)
+- Error handling: graceful degradation via streaming or fallback to send_activity
+
+**Architecture Flow:**
+```
+BEFORE: User → typing indicator → await query() [blocks 5-30s] → send_activity(full_text)
+
+AFTER:  User → StreamingResponse(context)
+             → queue_informative_update("Searching HR Docs...")
+             → queue_text_chunk(reasoning_delta)         [streamed]
+             → queue_text_chunk("\n\n---\n\n")            [separator]
+             → queue_text_chunk(content_delta)            [streamed]
+             → queue_text_chunk("\n---\n*Source: HR Docs*") [attribution]
+             → await end_stream()
+```
+
+**Implementation:** Completed in commits `97de6ef` → `ab77068` (87/87 tests passing)
+
+---
+
 ## Template for New Decisions
 
 ```markdown

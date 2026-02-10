@@ -111,17 +111,9 @@ User (Teams/Telegram) → Azure Bot Service → Bot Backend (aiohttp:3978)
                                                  ↓
                                     ┌─────── nlm-proxy Client ───────┐
                                     │   POST /v1/chat/completions    │
-                                    │   model: knowledge-finder      │
-                                    │   metadata: allowed_notebooks  │
-                                    └────────────┬───────────────────┘
-                                                 ↓
-                                    ┌─── Response Formatter ─────────┐
-                                    │   Extract notebook from        │
-                                    │   reasoning_content            │
-                                    │   Add source attribution       │
-                                    └────────────┬───────────────────┘
-                                                 ↓
-                                         Send to User
+                                    │   stream=True, SSE chunks      │
+                                    │   → StreamingResponse to user  │
+                                    └────────────────────────────────┘
 ```
 
 ## Key Components
@@ -294,6 +286,14 @@ Detailed step-by-step guides:
   - Graceful error handling
   - Fallback to echo mode when nlm-proxy not configured
 - **Total: 72/72 tests passing, 77% code coverage**
+
+**✅ End-to-End Streaming Complete** (branch: `feature/nlm-proxy-integration`)
+- NLMClient.query_stream() async generator yields chunks in real-time (9/9 tests)
+- StreamingResponse pipes tokens directly to Teams/DirectLine (9/9 tests)
+- Informative status update with notebook name ("Searching HR Docs...")
+- Reasoning + separator + answer content streamed to user
+- Source attribution appended at stream end
+- **Total: 87/87 tests passing**
 
 ## Test Mode for Agent Playground
 
