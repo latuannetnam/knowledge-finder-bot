@@ -212,5 +212,8 @@ __marimo__/
 # Git worktrees
 .worktrees/
 
+#Config files
+config/*
+
 #Others
 .devtunnel-endpoint

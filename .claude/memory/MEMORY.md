@@ -52,22 +52,26 @@
 
 ## Current Phase
 
-- **Status:** ✅ M365 Agents SDK migration complete and verified working
-- **Milestone:** Echo bot functional with M365 Agents SDK v0.7.0 + Agent Playground tested
-- **Next:** Implement nlm-proxy integration and Azure AD auth
-- **Tests:** All passing (2/2 bot tests, working with Agent Playground)
+- **Status:** ✅ ACL mechanism complete with dual-mode routing
+- **Milestone:** Full ACL enforcement with TEST_MODE for Agent Playground testing
+- **Next:** Implement nlm-proxy integration (replace echo with real queries)
+- **Tests:** All passing (46/46 tests, 77% code coverage)
 
 **Recent Completion:**
-- ✅ Migrated from Bot Framework SDK → M365 Agents SDK
-- ✅ Fixed authentication using official Microsoft pattern
-- ✅ Added `microsoft-agents-authentication-msal` package
-- ✅ Verified working with Agent Playground
+- ✅ M365 Agents SDK migration (v0.7.0)
+- ✅ Graph API client with app-only authentication (8/8 tests)
+- ✅ ACL service with YAML-based access control (14/14 tests)
+- ✅ Pydantic models with GUID validation (11/11 tests)
+- ✅ Bot handler with ACL enforcement (10/10 tests)
+- ✅ **Dual-mode routing**: Fake AAD IDs → MockGraphClient, real AAD IDs → Graph API
+- ✅ MockGraphClient for Agent Playground testing without Azure AD
 
-**Critical Discovery - Authentication Fix:**
-- M365 Agents SDK requires specific env var format: `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__*`
-- Must use `MsalConnectionManager` from `microsoft-agents-authentication-msal`
-- Must use `load_configuration_from_env()` to load SDK config
-- Pattern from: [github.com/microsoft/Agents](https://github.com/microsoft/Agents)
+**Critical Feature - TEST_MODE:**
+- Enable `TEST_MODE=true` for Agent Playground ACL testing
+- Set `TEST_USER_GROUPS` to simulate AD group memberships (comma-separated GUIDs)
+- Automatic routing: `00000000-0000-0000-0000-*` prefix → mock, real AAD ID → Graph API
+- Both clients coexist - per-request routing based on AAD ID pattern
+- Test groups defined in `config/acl.yaml` (Admin: 11111111..., HR: 22222222..., Eng: 33333333...)
 
 **🔄 Update this section when:**
 - Starting a new task

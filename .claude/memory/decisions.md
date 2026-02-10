@@ -166,6 +166,37 @@ Record significant architecture decisions with rationale.
 
 ---
 
+### ADR-009: Dual-Mode Routing for Agent Playground Testing
+
+**Date:** 2025-02-10
+
+**Decision:** Implement dual-mode routing that automatically detects fake AAD IDs from Agent Playground and routes them to MockGraphClient, while routing real AAD IDs to the real Graph API client.
+
+**Rationale:**
+- Agent Playground uses fake AAD IDs (`00000000-0000-0000-0000-*`) that cause Graph API 404 errors
+- Need to test ACL logic in Agent Playground without Azure AD setup
+- Both development (Agent Playground) and production (Teams/Telegram) should work simultaneously
+- Per-request routing enables seamless testing without configuration changes
+- MockGraphClient provides deterministic group memberships via `TEST_USER_GROUPS` env var
+
+**Implementation:**
+- `TEST_MODE=true` enables MockGraphClient creation alongside real GraphClient
+- `_is_fake_aad_id()` detects the `00000000-0000-0000-0000-` prefix pattern
+- Per-request routing in `on_message()` handler selects appropriate client
+- Test groups defined in `config/acl.yaml` (Admin: 11111111..., HR: 22222222..., Eng: 33333333...)
+- Falls back gracefully when only one client is available
+
+**Consequences:**
+- Both real and mock clients can coexist in memory
+- Adds 4 new dual-mode routing tests (46/46 tests total)
+- Enables ACL testing in Agent Playground with simulated group memberships
+- No configuration changes needed when switching between Agent Playground and Teams
+- `TEST_USER_GROUPS` env var controls which groups the mock user belongs to
+
+**Implementation:** Completed (10/10 bot tests passing)
+
+---
+
 ## Template for New Decisions
 
 ```markdown

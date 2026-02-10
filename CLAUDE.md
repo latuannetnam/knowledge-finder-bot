@@ -242,6 +242,10 @@ Environment variables in `.env` (never commit):
 - `GRAPH_CACHE_TTL` (default: `300` seconds)
 - `GRAPH_CACHE_MAXSIZE` (default: `1000` users)
 
+**Test Mode (Agent Playground testing):**
+- `TEST_MODE` (default: `false`) - Enable dual-mode: fake AAD IDs → mock, real AAD IDs → Graph API
+- `TEST_USER_GROUPS` (default: `""`) - Comma-separated group IDs for MockGraphClient
+
 ## Implementation Plans
 
 Detailed step-by-step guides:
@@ -262,5 +266,33 @@ Detailed step-by-step guides:
 - Graph API client with app-only authentication (8/8 tests)
 - ACL service with YAML-based access control (14/14 tests)
 - Pydantic models with GUID validation (11/11 tests)
-- Bot handler with ACL enforcement and graceful fallback (6/6 tests)
-- Total: 42/42 tests passing, 77% code coverage
+- Bot handler with ACL enforcement and graceful fallback (10/10 tests)
+- **Dual-mode routing**: Fake AAD IDs (Agent Playground) → MockGraphClient, real AAD IDs → Graph API
+- MockGraphClient for Agent Playground testing without Azure AD
+- Total: 46/46 tests passing, 77% code coverage
+
+## Test Mode for Agent Playground
+
+The bot supports **dual-mode routing** for testing ACL logic in Agent Playground without Azure AD:
+
+**How it works:**
+1. Enable `TEST_MODE=true` in `.env`
+2. Set `TEST_USER_GROUPS` to simulate AD group memberships (comma-separated GUIDs)
+3. Bot automatically detects AAD ID prefix:
+   - `00000000-0000-0000-0000-*` (Agent Playground) → MockGraphClient
+   - Real AAD IDs (Teams/Telegram) → Real Graph API
+4. Both modes coexist — per-request routing based on AAD ID pattern
+
+**Example configuration:**
+```bash
+# .env
+TEST_MODE=true
+TEST_USER_GROUPS=22222222-2222-2222-2222-222222222222,33333333-3333-3333-3333-333333333333
+```
+
+**Test groups** (defined in `config/acl.yaml`):
+- `11111111-1111-1111-1111-111111111111` - Test Admin (all notebooks)
+- `22222222-2222-2222-2222-222222222222` - Test HR (hr-notebook + public)
+- `33333333-3333-3333-3333-333333333333` - Test Engineering (engineering-notebook + public)
+
+See `.env.example` for complete TEST_MODE examples.

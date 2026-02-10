@@ -67,16 +67,30 @@ def create_app() -> Application:
 
     # Initialize ACL components (optional — graceful fallback to echo mode)
     graph_client = None
+    mock_client = None
     acl_service = None
 
     try:
+        # Always try to create the real Graph API client
         graph_client = GraphClient(
             client_id=settings.graph_client_id,
             client_secret=settings.graph_client_secret,
             tenant_id=settings.app_tenant_id,
         )
+        logger.info("graph_client_initialized", mode="real")
+    except Exception as e:
+        logger.warning("graph_client_disabled", reason=str(e))
+
+    # In test mode, also create mock client for Agent Playground fake AAD IDs
+    if settings.test_mode:
+        from knowledge_finder_bot.auth.mock_graph_client import MockGraphClient
+        test_groups = [g.strip() for g in settings.test_user_groups.split(",") if g.strip()]
+        mock_client = MockGraphClient(test_groups)
+        logger.info("dual_mode_enabled", test_groups=test_groups)
+
+    try:
         acl_service = ACLService(settings.acl_config_path)
-        logger.info("acl_enabled", config_path=settings.acl_config_path)
+        logger.info("acl_service_loaded", config_path=settings.acl_config_path)
     except Exception as e:
         logger.warning("acl_disabled", reason=str(e))
 
@@ -84,6 +98,7 @@ def create_app() -> Application:
         settings=settings,
         graph_client=graph_client,
         acl_service=acl_service,
+        mock_graph_client=mock_client,
     )
 
     app = Application(middlewares=[jwt_authorization_middleware])

@@ -1,5 +1,5 @@
 # Planning
-- [ ] Test ACL flow end-to-end with real Azure AD groups
+- [ ] Test bot streaming response
 - [ ] Implement nlm-proxy client integration
 
 # Done

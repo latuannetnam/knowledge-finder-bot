@@ -4,7 +4,7 @@
 
 [![Status](https://img.shields.io/badge/Status-ACL_Complete-success)](./docs/architecture.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](./pyproject.toml)
-[![Tests](https://img.shields.io/badge/Tests-42%2F42_passing-brightgreen)](./tests/)
+[![Tests](https://img.shields.io/badge/Tests-46%2F46_passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/Coverage-77%25-green)](./tests/)
 
 This bot allows users to query curated knowledge bases (NotebookLM notebooks) directly from their chat interface. It handles authentication, enforces notebook-level access control via Azure AD groups, and routes queries to the appropriate notebook.
@@ -14,6 +14,7 @@ This bot allows users to query curated knowledge bases (NotebookLM notebooks) di
 - ✅ **Azure AD Integration** - Authenticate users via Microsoft Teams
 - ✅ **Access Control Lists (ACL)** - Control notebook access by AD group membership
 - ✅ **Wildcard Patterns** - Support public notebooks and admin groups
+- ✅ **Dual-Mode Routing** - Test ACL in Agent Playground without Azure AD setup
 - ✅ **Graceful Fallback** - Echo mode when ACL is unavailable
 - ✅ **Caching** - 5-minute TTL cache for Graph API calls (reduces API load by ~95%)
 - ✅ **M365 Agents SDK** - Modern Microsoft bot framework
@@ -83,17 +84,18 @@ knowledge-finder-bot/
 │       │   ├── models.py    # Pydantic models (GroupACL, NotebookACL)
 │       │   └── service.py   # ACL logic (get_allowed_notebooks)
 │       ├── auth/            # ✅ Authentication
-│       │   └── graph_client.py  # Microsoft Graph API client
+│       │   ├── graph_client.py     # Microsoft Graph API client
+│       │   └── mock_graph_client.py # Mock client for Agent Playground
 │       ├── bot/             # ✅ Bot handler
 │       │   └── bot.py       # create_agent_app() factory
 │       ├── config.py        # ✅ Pydantic settings
 │       └── main.py          # ✅ aiohttp server entrypoint
-├── tests/                   # ✅ 42/42 tests passing
+├── tests/                   # ✅ 46/46 tests passing
 │   ├── test_acl_models.py   # 11 tests (100% coverage)
 │   ├── test_acl_service.py  # 14 tests (100% coverage)
 │   ├── test_graph_client.py # 8 tests (98% coverage)
 │   ├── test_config.py       # 3 tests (94% coverage)
-│   └── test_bot.py          # 6 tests (89% coverage)
+│   └── test_bot.py          # 10 tests (89% coverage, includes dual-mode)
 ├── config/
 │   └── acl.yaml             # ✅ ACL configuration
 ├── pyproject.toml           # Dependencies (uv)
@@ -133,7 +135,33 @@ notebooks:
 - `allowed_groups: ["*"]` → Notebook accessible to ALL authenticated users
 - `id: "*"` → Groups listed can access ALL notebooks (admin/superuser pattern)
 
-## 🧪 Testing
+## 🧪 Testing & Development
+
+### Test Mode for Agent Playground
+
+The bot supports **dual-mode routing** to test ACL logic in Agent Playground without Azure AD:
+
+```bash
+# Enable TEST_MODE in .env
+TEST_MODE=true
+TEST_USER_GROUPS=22222222-2222-2222-2222-222222222222,33333333-3333-3333-3333-333333333333
+```
+
+**How it works:**
+1. Agent Playground sends fake AAD IDs like `00000000-0000-0000-0000-0000000000020`
+2. Bot detects the `00000000-0000-0000-0000-*` prefix pattern
+3. Fake IDs → MockGraphClient (uses `TEST_USER_GROUPS`)
+4. Real AAD IDs → Real Graph API client
+5. Both modes coexist — automatic per-request routing
+
+**Test Groups** (defined in `config/acl.yaml`):
+- `11111111-1111-1111-1111-111111111111` - Test Admin (all notebooks)
+- `22222222-2222-2222-2222-222222222222` - Test HR (hr-notebook + public)
+- `33333333-3333-3333-3333-333333333333` - Test Engineering (engineering-notebook + public)
+
+See `.env.example` for complete TEST_MODE examples.
+
+### Running Tests
 
 ```bash
 # Run all tests
@@ -146,12 +174,12 @@ uv run pytest tests/ -v --cov=knowledge_finder_bot
 uv run pytest tests/test_acl_service.py -v
 ```
 
-**Test Results:** 42/42 tests passing (100% success rate)
+**Test Results:** 46/46 tests passing (100% success rate)
 - ACL Models: 11/11 (100% coverage)
 - ACL Service: 14/14 (100% coverage)
 - Graph API Client: 8/8 (98% coverage)
 - Config: 3/3 (94% coverage)
-- Bot Integration: 6/6 (89% coverage)
+- Bot Integration: 10/10 (89% coverage, includes dual-mode routing)
 
 ## 📖 Documentation
 
@@ -174,8 +202,10 @@ uv run pytest tests/test_acl_service.py -v
 - ACL service with YAML-based configuration
 - Pydantic models with GUID validation
 - Bot handler with ACL enforcement and graceful fallback
+- **Dual-mode routing**: Fake AAD IDs → MockGraphClient, real IDs → Graph API
+- MockGraphClient for Agent Playground testing without Azure AD
 - TTLCache for user info (5-min TTL, 1000 users)
-- Comprehensive test suite (42/42 tests passing)
+- Comprehensive test suite (46/46 tests passing)
 
 ### ⏳ Next Phase
 
@@ -200,6 +230,10 @@ GRAPH_CLIENT_SECRET=your-graph-secret
 ACL_CONFIG_PATH=config/acl.yaml
 GRAPH_CACHE_TTL=300
 GRAPH_CACHE_MAXSIZE=1000
+
+# Test Mode (Agent Playground testing)
+TEST_MODE=false
+TEST_USER_GROUPS=
 
 # Server Configuration
 HOST=0.0.0.0

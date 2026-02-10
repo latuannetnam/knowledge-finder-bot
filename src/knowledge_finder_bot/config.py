@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     graph_cache_ttl: int = Field(300, alias="GRAPH_CACHE_TTL")
     graph_cache_maxsize: int = Field(1000, alias="GRAPH_CACHE_MAXSIZE")
 
+    # Test Mode (for Agent Playground testing)
+    test_mode: bool = Field(False, alias="TEST_MODE")
+    test_user_groups: str = Field("", alias="TEST_USER_GROUPS")  # Comma-separated group IDs
+
     # Server
     host: str = Field("0.0.0.0", alias="HOST")
     port: int = Field(3978, alias="PORT")

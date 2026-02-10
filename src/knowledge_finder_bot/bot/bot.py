@@ -25,18 +25,28 @@ from knowledge_finder_bot.config import Settings
 
 logger = structlog.get_logger()
 
+# Agent Playground sends fake AAD IDs like 00000000-0000-0000-0000-0000000000020
+_FAKE_AAD_PREFIX = "00000000-0000-0000-0000-"
+
+
+def _is_fake_aad_id(aad_object_id: str) -> bool:
+    """Detect fake AAD Object IDs from Agent Playground."""
+    return aad_object_id.startswith(_FAKE_AAD_PREFIX)
+
 
 def create_agent_app(
     settings: Settings,
     graph_client: GraphClient | None = None,
     acl_service: ACLService | None = None,
+    mock_graph_client=None,
 ) -> AgentApplication[TurnState]:
     """Create and configure the agent application with ACL support.
 
     Args:
         settings: Application settings.
-        graph_client: Graph API client (None disables ACL, echo-only mode).
-        acl_service: ACL service (None disables ACL, echo-only mode).
+        graph_client: Real Graph API client (None disables ACL for real users).
+        acl_service: ACL service (None disables ACL entirely).
+        mock_graph_client: Mock client for Agent Playground fake AAD IDs.
     """
     load_dotenv()
 
@@ -57,8 +67,10 @@ def create_agent_app(
     # Store connection manager for main.py access
     agent_app._connection_manager = connection_manager
 
-    # ACL components (None = echo-only mode)
-    acl_enabled = graph_client is not None and acl_service is not None
+    # ACL requires at least one graph client and acl_service
+    has_real = graph_client is not None
+    has_mock = mock_graph_client is not None
+    acl_enabled = (has_real or has_mock) and acl_service is not None
     user_cache: TTLCache | None = None
     if acl_enabled:
         user_cache = TTLCache(
@@ -97,11 +109,28 @@ def create_agent_app(
             )
             return
 
+        # Pick the right client: fake AAD ID → mock, real AAD ID → Graph API
+        is_fake = _is_fake_aad_id(aad_object_id)
+        if is_fake and has_mock:
+            active_client = mock_graph_client
+            source = "mock"
+        elif has_real:
+            active_client = graph_client
+            source = "graph_api"
+        elif has_mock:
+            active_client = mock_graph_client
+            source = "mock"
+        else:
+            logger.error("no_graph_client_available", aad_object_id=aad_object_id)
+            await context.send_activity("Unable to verify your permissions.")
+            return
+
         logger.info(
             "message_received",
             user_name=user_name,
             aad_object_id=aad_object_id,
             message_length=len(user_message or ""),
+            source=source,
         )
 
         # Get user info (cached)
@@ -110,9 +139,9 @@ def create_agent_app(
                 user_info = user_cache[aad_object_id]
                 logger.debug("user_cache_hit", aad_object_id=aad_object_id)
             else:
-                user_info = await graph_client.get_user_with_groups(aad_object_id)
+                user_info = await active_client.get_user_with_groups(aad_object_id)
                 user_cache[aad_object_id] = user_info
-                logger.debug("user_cache_miss", aad_object_id=aad_object_id)
+                logger.debug("user_cache_miss", aad_object_id=aad_object_id, source=source)
         except Exception as e:
             logger.error("graph_api_failed", error=str(e), aad_object_id=aad_object_id)
             await context.send_activity(

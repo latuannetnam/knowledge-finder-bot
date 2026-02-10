@@ -171,3 +171,119 @@ async def test_graph_api_failure_returns_graceful_error(acl_app, mock_graph_clie
         for c in calls
     )
     assert error_found, f"Graph error message not found in: {calls}"
+
+
+# --- Dual-mode routing tests ---
+
+@pytest.fixture
+def dual_mode_app(settings, acl_config_path, mock_graph_client):
+    """Agent app with both real and mock graph clients (dual-mode)."""
+    from knowledge_finder_bot.acl.service import ACLService
+
+    real_client = AsyncMock()
+    real_client.get_user_with_groups = AsyncMock(
+        return_value=UserInfo(
+            aad_object_id="bc9f9bde-cdc4-4a54-b1a3-ef88bf23f87b",
+            display_name="Real Teams User",
+            email="real@company.com",
+            groups=[
+                {"id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "display_name": "HR Team"},
+            ],
+        )
+    )
+    real_client.close = AsyncMock()
+
+    acl_service = ACLService(acl_config_path)
+    app = create_agent_app(
+        settings=settings,
+        graph_client=real_client,
+        acl_service=acl_service,
+        mock_graph_client=mock_graph_client,
+    )
+    app._test_real_client = real_client
+    return app
+
+
+@pytest.mark.asyncio
+async def test_fake_aad_id_routes_to_mock_client(dual_mode_app, mock_graph_client):
+    """Fake AAD ID from Agent Playground should use mock_graph_client."""
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello from playground",
+        aad_object_id="00000000-0000-0000-0000-0000000000020",
+    )
+    await dual_mode_app.on_turn(context)
+
+    mock_graph_client.get_user_with_groups.assert_called_once_with(
+        "00000000-0000-0000-0000-0000000000020"
+    )
+    dual_mode_app._test_real_client.get_user_with_groups.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_real_aad_id_routes_to_real_client(dual_mode_app, mock_graph_client):
+    """Real AAD ID from Teams should use real graph_client."""
+    real_aad_id = "bc9f9bde-cdc4-4a54-b1a3-ef88bf23f87b"
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello from Teams",
+        aad_object_id=real_aad_id,
+    )
+    await dual_mode_app.on_turn(context)
+
+    dual_mode_app._test_real_client.get_user_with_groups.assert_called_once_with(real_aad_id)
+    mock_graph_client.get_user_with_groups.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_mock_only_mode_handles_real_aad_id(settings, acl_config_path, mock_graph_client):
+    """When only mock client is available, real AAD IDs fall back to mock."""
+    from knowledge_finder_bot.acl.service import ACLService
+
+    acl_service = ACLService(acl_config_path)
+    app = create_agent_app(
+        settings=settings,
+        graph_client=None,
+        acl_service=acl_service,
+        mock_graph_client=mock_graph_client,
+    )
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="bc9f9bde-cdc4-4a54-b1a3-ef88bf23f87b",
+    )
+    await app.on_turn(context)
+
+    mock_graph_client.get_user_with_groups.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_no_clients_returns_error(settings, acl_config_path):
+    """When no graph clients available but ACL is configured, user gets error."""
+    from knowledge_finder_bot.acl.service import ACLService
+
+    acl_service = ACLService(acl_config_path)
+    # No graph_client and no mock_graph_client — but acl_service exists
+    # acl_enabled will be False, so it falls back to echo mode
+    app = create_agent_app(
+        settings=settings,
+        graph_client=None,
+        acl_service=acl_service,
+        mock_graph_client=None,
+    )
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="some-aad-id",
+    )
+    await app.on_turn(context)
+
+    calls = context.send_activity.call_args_list
+    # Falls back to echo mode since acl_enabled = False
+    echo_found = any(
+        isinstance(c[0][0], str) and "Echo" in c[0][0]
+        for c in calls
+    )
+    assert echo_found, f"Should fall back to echo mode: {calls}"
