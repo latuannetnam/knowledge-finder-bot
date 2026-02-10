@@ -432,127 +432,147 @@ class Settings(BaseSettings):
         extra = "ignore"
 ```
 
-#### 2. Main Bot Class (`bot/bot.py`)
+#### 2. Main Bot Handler (`bot/bot.py`) - M365 Agents SDK Pattern
+
+**Note:** This uses M365 Agents SDK (not legacy Bot Framework). The codebase migrated in commit `dbeed4c`.
 
 ```python
-from botbuilder.core import ActivityHandler, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
+import re
+from microsoft_agents.activity import AgentApplication, TurnContext, TurnState
+from microsoft_agents.schema import ActivityTypes
+import structlog
+from cachetools import TTLCache
 
-class NotebookLMBot(ActivityHandler):
-    """Main bot handler for NotebookLM queries."""
+logger = structlog.get_logger()
 
-    def __init__(
-        self,
-        nlm_client: NLMProxyClient,
-        acl_service: ACLService,
-        graph_client: GraphClient,
-        settings: Settings,
-    ):
-        self.nlm_client = nlm_client
-        self.acl_service = acl_service
-        self.graph_client = graph_client
-        self.settings = settings
+# Global components initialized in main.py
+GRAPH_CLIENT: GraphClient = None
+ACL_SERVICE: ACLService = None
+NLM_CLIENT: NLMProxyClient = None
+SETTINGS: Settings = None
 
-    async def on_message_activity(self, turn_context: TurnContext):
-        """Handle incoming messages."""
-        user_message = turn_context.activity.text
+# In-memory cache with TTL and size limit (fixes I2: unbounded cache)
+USER_CACHE = TTLCache(maxsize=1000, ttl=300)  # 1000 users, 5 min TTL
 
-        # 1. Get user identity
-        user_info = await self._get_user_info(turn_context)
-        if not user_info:
-            await turn_context.send_activity("❌ Authentication required.")
-            return
+@AGENT_APP.message(re.compile(r".*"))
+async def on_message(context: TurnContext, state: TurnState):
+    """Handle incoming messages with ACL enforcement."""
 
-        # 2. Check ACL
-        allowed_notebooks = await self.acl_service.get_allowed_notebooks(
-            user_groups=user_info.groups
+    # 1. Extract user identity from Teams activity
+    aad_object_id = context.activity.from_property.aad_object_id
+    user_name = context.activity.from_property.name
+
+    if not aad_object_id:
+        logger.warning("no_aad_object_id", user_name=user_name)
+        await context.send_activity(
+            "❌ Unable to identify your account. "
+            "Please ensure you're signed into Teams with your work account."
         )
-        if not allowed_notebooks:
-            await turn_context.send_activity(
-                "🔒 You don't have access to any knowledge bases. "
-                "Contact your administrator."
-            )
-            return
+        return
 
-        # 3. Show typing indicator
-        await turn_context.send_activity(
-            Activity(type=ActivityTypes.typing)
-        )
+    logger.info(
+        "message_received",
+        user_name=user_name,
+        aad_object_id=aad_object_id,
+        message_length=len(context.activity.text or ""),
+    )
 
-        # 4. Query nlm-proxy
-        try:
-            conversation_id = self._get_conversation_id(turn_context)
-            response = await self.nlm_client.query(
-                message=user_message,
-                conversation_id=conversation_id,
-                allowed_notebooks=allowed_notebooks,
-            )
-
-            # 5. Format and send response
-            formatted = self._format_response(
-                content=response.content,
-                notebook_name=response.notebook_name,
-                show_source=self.settings.show_source_notebook,
-            )
-            await turn_context.send_activity(formatted)
-
-        except RateLimitError:
-            await turn_context.send_activity(
-                "⏳ Too many requests. Please wait a moment and try again."
-            )
-        except Exception as e:
-            logger.exception("Query failed", error=str(e))
-            await turn_context.send_activity(
-                "⚠️ Something went wrong. Please try again later."
-            )
-
-    async def on_members_added_activity(self, members_added, turn_context: TurnContext):
-        """Welcome new users."""
-        for member in members_added:
-            if member.id != turn_context.activity.recipient.id:
-                await turn_context.send_activity(
-                    "👋 Hello! I'm your NotebookLM assistant. "
-                    "Ask me anything about your organization's knowledge bases.\n\n"
-                    "Type `/help` for available commands."
-                )
-
-    def _get_conversation_id(self, turn_context: TurnContext) -> str:
-        """Extract conversation ID for session mapping."""
-        # Teams: conversation.id is like "19:abc123@thread.tacv2"
-        # Telegram: will be mapped differently
-        return turn_context.activity.conversation.id
-
-    async def _get_user_info(self, turn_context: TurnContext) -> UserInfo | None:
-        """Extract and validate user information."""
-        activity = turn_context.activity
-
-        # For Teams, use AAD object ID to get group membership
-        aad_object_id = activity.from_property.aad_object_id
-        if aad_object_id:
-            return await self.graph_client.get_user_with_groups(aad_object_id)
-
-        # For Telegram, check linked account
-        # (implementation in telegram_oauth.py)
-        return None
-
-    def _format_response(
-        self,
-        content: str,
-        notebook_name: str | None,
-        show_source: bool,
-    ) -> Activity:
-        """Format response with optional source attribution."""
-        if show_source and notebook_name:
-            # Add source footer
-            formatted_content = f"{content}\n\n---\n📚 *Source: {notebook_name}*"
+    # 2. Get user groups via Graph API (with caching)
+    try:
+        if aad_object_id in USER_CACHE:
+            user_info = USER_CACHE[aad_object_id]
+            logger.debug("user_cache_hit", aad_object_id=aad_object_id)
         else:
-            formatted_content = content
-
-        return Activity(
-            type=ActivityTypes.message,
-            text=formatted_content,
-            text_format="markdown",
+            user_info = await GRAPH_CLIENT.get_user_with_groups(aad_object_id)
+            USER_CACHE[aad_object_id] = user_info
+            logger.debug("user_cache_miss", aad_object_id=aad_object_id)
+    except Exception as e:
+        logger.error("graph_api_failed", error=str(e), aad_object_id=aad_object_id)
+        await context.send_activity(
+            "⚠️ Unable to verify your permissions. Please try again later."
         )
+        return
+
+    # Log group count only, not names/IDs (fixes I5: security - no PII in logs)
+    logger.info(
+        "user_authenticated",
+        user_name=user_info.display_name,
+        group_count=len(user_info.groups),
+    )
+
+    # 3. Check ACL - get allowed notebooks
+    allowed_notebooks = await ACL_SERVICE.get_allowed_notebooks(user_info.groups)
+
+    if not allowed_notebooks:
+        logger.warning(
+            "acl_denied",
+            user_name=user_info.display_name,
+            group_count=len(user_info.groups),
+        )
+        # Don't reveal group membership to user (fixes I5: security)
+        await context.send_activity(
+            "🔒 You don't have access to any knowledge bases.
+
+"
+            "Please contact your administrator for access."
+        )
+        return
+
+    logger.info(
+        "acl_granted",
+        user_name=user_info.display_name,
+        notebook_count=len(allowed_notebooks),
+    )
+
+    # 4. Show typing indicator
+    await context.send_activity({"type": ActivityTypes.typing})
+
+    # 5. Query nlm-proxy
+    try:
+        conversation_id = context.activity.conversation.id
+        response = await NLM_CLIENT.query(
+            message=context.activity.text,
+            conversation_id=conversation_id,
+            allowed_notebooks=allowed_notebooks,
+        )
+
+        # 6. Format and send response
+        if SETTINGS.show_source_notebook and response.notebook_name:
+            formatted_content = (
+                f"{response.content}
+
+"
+                f"---
+📚 *Source: {response.notebook_name}*"
+            )
+        else:
+            formatted_content = response.content
+
+        await context.send_activity(formatted_content)
+
+    except RateLimitError:
+        await context.send_activity(
+            "⏳ Too many requests. Please wait a moment and try again."
+        )
+    except Exception as e:
+        logger.exception("query_failed", error=str(e))
+        await context.send_activity(
+            "⚠️ Something went wrong. Please try again later."
+        )
+
+
+@AGENT_APP.conversation_update("membersAdded")
+async def on_members_added(context: TurnContext, state: TurnState):
+    """Welcome new users."""
+    for member in context.activity.members_added:
+        if member.id != context.activity.recipient.id:
+            await context.send_activity(
+                "👋 Hello! I'm your NotebookLM assistant. "
+                "Ask me anything about your organization's knowledge bases.
+
+"
+                "Type `/help` for available commands."
+            )
 ```
 
 #### 3. nlm-proxy Client (`nlm/client.py`)
@@ -665,20 +685,43 @@ class NLMProxyClient:
 
 #### 4. ACL Service (`acl/service.py`)
 
+**Fixes Applied:** C1 (Object IDs), C2 (no duplicates), I3 (hash-based cache keys), I4 (Pydantic validation)
+
 ```python
 import yaml
-from dataclasses import dataclass
-from functools import lru_cache
+import hashlib
+from pydantic import BaseModel, Field, validator
 
-@dataclass
-class NotebookACL:
+# Pydantic models for YAML validation (fixes I4)
+class GroupACL(BaseModel):
+    """ACL entry for a group with immutable Object ID."""
+    group_id: str = Field(..., description="Azure AD Group Object ID (immutable GUID)")
+    display_name: str = Field(..., description="Group display name (for humans only)")
+
+    @validator('group_id')
+    def validate_guid(cls, v):
+        """Ensure group_id looks like a GUID."""
+        if not (len(v) == 36 and v.count('-') == 4):
+            raise ValueError(f"group_id must be a valid GUID, got: {v}")
+        return v
+
+class NotebookACL(BaseModel):
     """ACL entry for a notebook."""
-    notebook_id: str
-    notebook_name: str
-    allowed_groups: list[str]
+    id: str = Field(..., description="NotebookLM notebook ID")
+    name: str = Field(..., description="Human-readable notebook name")
+    description: str = Field(default="", description="Optional description")
+    allowed_groups: list[GroupACL | str] = Field(
+        default_factory=list,
+        description="List of group ACLs or wildcard '*'"
+    )
+
+class ACLConfig(BaseModel):
+    """Root ACL configuration."""
+    notebooks: list[NotebookACL]
+    defaults: dict = Field(default_factory=dict)
 
 class ACLService:
-    """Service for managing notebook access control."""
+    """Service for managing notebook access control with Object ID matching."""
 
     def __init__(self, config_path: str, redis_client=None, cache_ttl: int = 300):
         self.config_path = config_path
@@ -686,91 +729,142 @@ class ACLService:
         self.cache_ttl = cache_ttl
         self._acl_config = self._load_config()
 
-    def _load_config(self) -> dict:
-        """Load ACL configuration from YAML file."""
+    def _load_config(self) -> ACLConfig:
+        """Load and validate ACL configuration from YAML file."""
         with open(self.config_path) as f:
-            return yaml.safe_load(f)
+            raw_config = yaml.safe_load(f)
+
+        # Validate with Pydantic (raises ValidationError if invalid)
+        return ACLConfig(**raw_config)
 
     def reload_config(self):
         """Reload ACL configuration (for hot reload)."""
         self._acl_config = self._load_config()
 
-    async def get_allowed_notebooks(self, user_groups: list[str]) -> list[str]:
-        """Get list of notebook IDs user can access based on group membership."""
-        # Check cache first
-        cache_key = f"acl:{':'.join(sorted(user_groups))}"
+    async def get_allowed_notebooks(
+        self,
+        user_groups: list[dict[str, str]]  # Now expects [{"id": "...", "display_name": "..."}]
+    ) -> list[str]:
+        """Get list of notebook IDs user can access based on group membership.
+
+        Args:
+            user_groups: List of dicts with 'id' and 'display_name' keys
+
+        Returns:
+            List of notebook IDs (no duplicates)
+        """
+        # Extract group IDs for matching (fixes C1 - use Object IDs only)
+        user_group_ids = set(g["id"] for g in user_groups)
+
+        # Generate cache key using hash to avoid collisions (fixes I3)
+        cache_key = self._generate_cache_key(user_group_ids)
+
         if self.redis:
             cached = await self.redis.get(cache_key)
             if cached:
                 return cached.split(",")
 
-        # Compute allowed notebooks
-        allowed = []
-        for notebook in self._acl_config.get("notebooks", []):
-            notebook_groups = set(notebook.get("allowed_groups", []))
-            user_group_set = set(user_groups)
+        # Use set to eliminate duplicates (fixes C2)
+        allowed = set()
 
-            # Check if user has any allowed group
-            if notebook_groups & user_group_set:
-                allowed.append(notebook["id"])
+        for notebook in self._acl_config.notebooks:
+            # Extract allowed group IDs (handle both GroupACL objects and wildcard "*")
+            allowed_group_ids = set()
+            has_wildcard = False
 
-            # Check for wildcard (all authenticated users)
-            if "*" in notebook_groups:
-                allowed.append(notebook["id"])
+            for group in notebook.allowed_groups:
+                if isinstance(group, str) and group == "*":
+                    has_wildcard = True
+                elif isinstance(group, GroupACL):
+                    allowed_group_ids.add(group.group_id)
+
+            # Check for match
+            if has_wildcard:
+                allowed.add(notebook.id)
+            elif allowed_group_ids & user_group_ids:  # Set intersection
+                allowed.add(notebook.id)
+
+        # Convert to sorted list for consistent ordering
+        result = sorted(allowed)
 
         # Cache result
-        if self.redis and allowed:
-            await self.redis.setex(cache_key, self.cache_ttl, ",".join(allowed))
+        if self.redis and result:
+            await self.redis.setex(cache_key, self.cache_ttl, ",".join(result))
 
-        return allowed
+        return result
+
+    def _generate_cache_key(self, group_ids: set[str]) -> str:
+        """Generate collision-resistant cache key using hash (fixes I3)."""
+        # Sort for consistency, then hash
+        sorted_ids = sorted(group_ids)
+        hash_input = "|".join(sorted_ids).encode("utf-8")
+        hash_digest = hashlib.sha256(hash_input).hexdigest()[:16]
+        return f"acl:groups:{hash_digest}"
 
     def get_notebook_name(self, notebook_id: str) -> str | None:
         """Get notebook display name by ID."""
-        for notebook in self._acl_config.get("notebooks", []):
-            if notebook["id"] == notebook_id:
-                return notebook.get("name", notebook_id)
+        for notebook in self._acl_config.notebooks:
+            if notebook.id == notebook_id:
+                return notebook.name
         return None
 ```
 
-#### 5. ACL Configuration (`config/acl.yaml`)
+#### 5. ACL Configuration (`config/acl.yaml`) - Fixed Schema
+
+**Fix Applied:** C1 (Object IDs instead of display names)
 
 ```yaml
 # Access Control List Configuration
-# Maps Azure AD groups to allowed notebooks
+# Maps Azure AD groups (by Object ID) to allowed notebooks
+#
+# CRITICAL: Use Group Object IDs (immutable GUIDs), NOT display names
+# Display names can be changed by admins, breaking ACL silently.
+#
+# To find Group Object IDs:
+#   1. Azure Portal → Azure Active Directory → Groups → [Group Name] → Object ID
+#   2. Or use Graph Explorer: GET https://graph.microsoft.com/v1.0/groups?$filter=displayName eq 'GroupName'
 
 notebooks:
   # HR Knowledge Base
-  - id: "abc123-hr-notebook-id"
+  - id: "abc123-hr-notebook-id"  # NotebookLM notebook UUID
     name: "HR Policies & Procedures"
     description: "Employee handbook, leave policies, benefits"
     allowed_groups:
-      - "All Employees"           # AD group name
-      - "sg-hr-team"              # Security group
+      - group_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"  # Immutable Object ID
+        display_name: "All Employees"                      # For humans only
+      - group_id: "b2c3d4e5-f6g7-8901-bcde-f12345678901"
+        display_name: "HR Team"
 
   # Technical Documentation
   - id: "def456-tech-notebook-id"
     name: "Technical Documentation"
     description: "API docs, architecture, coding standards"
     allowed_groups:
-      - "sg-engineering"
-      - "sg-devops"
-      - "sg-tech-leads"
+      - group_id: "c3d4e5f6-g7h8-9012-cdef-g23456789012"
+        display_name: "Engineering"
+      - group_id: "d4e5f6g7-h8i9-0123-defg-h34567890123"
+        display_name: "DevOps"
+      - group_id: "e5f6g7h8-i9j0-1234-efgh-i45678901234"
+        display_name: "Tech Leads"
 
   # Product Knowledge
   - id: "ghi789-product-notebook-id"
     name: "Product Knowledge Base"
     description: "Product features, roadmap, competitive analysis"
     allowed_groups:
-      - "sg-product-team"
-      - "sg-sales"
-      - "sg-customer-success"
+      - group_id: "f6g7h8i9-j0k1-2345-fghi-j56789012345"
+        display_name: "Product Team"
+      - group_id: "g7h8i9j0-k1l2-3456-ghij-k67890123456"
+        display_name: "Sales"
+      - group_id: "h8i9j0k1-l2m3-4567-hijk-l78901234567"
+        display_name: "Customer Success"
 
   # Public Knowledge (all authenticated users)
   - id: "jkl012-public-notebook-id"
     name: "Company General Information"
     description: "Company policies, office locations, general FAQ"
     allowed_groups:
-      - "*"  # Wildcard: all authenticated users
+      - "*"  # Wildcard: all authenticated users (no group_id needed)
 
 # Default behavior when no notebook matches
 defaults:
@@ -782,6 +876,36 @@ defaults:
   no_access_message: |
     You don't have access to any knowledge bases.
     Please contact your IT administrator to request access.
+```
+
+**Migration Script** (`scripts/migrate_acl_to_object_ids.py`):
+```python
+"""One-time migration script to convert display names to Object IDs."""
+
+import yaml
+from msal import ConfidentialClientApplication
+import httpx
+import asyncio
+
+async def get_group_object_id(display_name: str, msal_app, http_client) -> str:
+    """Look up Group Object ID by display name."""
+    token = msal_app.acquire_token_for_client(
+        scopes=["https://graph.microsoft.com/.default"]
+    )["access_token"]
+
+    response = await http_client.get(
+        "https://graph.microsoft.com/v1.0/groups",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"$filter": f"displayName eq '{display_name}'", "$select": "id,displayName"}
+    )
+    data = response.json()
+
+    if not data.get("value"):
+        raise ValueError(f"Group not found: {display_name}")
+
+    return data["value"][0]["id"]
+
+# Usage: python scripts/migrate_acl_to_object_ids.py
 ```
 
 ---
@@ -942,7 +1066,7 @@ class UserInfo:
     aad_object_id: str
     display_name: str
     email: Optional[str]
-    groups: list[str]  # List of group display names
+    groups: list[dict[str, str]]  # List of {"id": "object-id", "display_name": "Name"}
 
 
 class GraphClient:
@@ -1000,7 +1124,8 @@ class GraphClient:
             aad_object_id: The user's Azure AD Object ID (from Teams activity)
 
         Returns:
-            UserInfo with display name, email, and list of group names
+            UserInfo with display name, email, and list of group dicts
+            Group format: [{"id": "guid", "display_name": "Name"}, ...]
         """
         token = self._get_app_token()
         client = await self._get_http_client()
@@ -1014,29 +1139,52 @@ class GraphClient:
         user_response.raise_for_status()
         user_data = user_response.json()
 
-        # Get group memberships (transitive - includes nested groups)
-        groups_response = await client.get(
-            f"{self.GRAPH_API_BASE}/users/{aad_object_id}/transitiveMemberOf",
-            headers=headers,
-            params={"$select": "displayName,id", "$top": "999"},
+        # Get group memberships with pagination (fixes I1)
+        groups = await self._get_all_groups_paginated(
+            aad_object_id, headers, client
         )
-        groups_response.raise_for_status()
-        groups_data = groups_response.json()
-
-        # Extract group display names (filter to only groups, not roles)
-        group_names = [
-            item["displayName"]
-            for item in groups_data.get("value", [])
-            if item.get("@odata.type") == "#microsoft.graph.group"
-            and item.get("displayName")
-        ]
 
         return UserInfo(
             aad_object_id=aad_object_id,
             display_name=user_data.get("displayName", "Unknown"),
             email=user_data.get("mail") or user_data.get("userPrincipalName"),
-            groups=group_names,
+            groups=groups,  # Now list of {"id": "...", "display_name": "..."}
         )
+
+    async def _get_all_groups_paginated(
+        self,
+        aad_object_id: str,
+        headers: dict,
+        client: httpx.AsyncClient,
+    ) -> list[dict[str, str]]:
+        """Get all group memberships with pagination support (fixes I1).
+
+        Returns:
+            List of {"id": "group-object-id", "display_name": "Group Name"}
+        """
+        groups = []
+        url = (
+            f"{self.GRAPH_API_BASE}/users/{aad_object_id}/transitiveMemberOf"
+            "?$select=id,displayName&$top=999"
+        )
+
+        while url:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract group Object IDs and display names (fixes C1)
+            for item in data.get("value", []):
+                if item.get("@odata.type") == "#microsoft.graph.group":
+                    groups.append({
+                        "id": item["id"],  # Object ID (immutable)
+                        "display_name": item.get("displayName", "Unknown"),
+                    })
+
+            # Follow pagination link if present
+            url = data.get("@odata.nextLink")
+
+        return groups
 
     async def close(self):
         """Close HTTP client."""
@@ -2526,7 +2674,7 @@ LOG_LEVEL=INFO
 # tests/test_acl.py
 
 import pytest
-from nlm_chatbot.acl.service import ACLService
+from knowledge_finder_bot.acl.service import ACLService
 
 @pytest.fixture
 def acl_service(tmp_path):
@@ -2560,6 +2708,22 @@ def test_user_with_multiple_groups(acl_service):
 def test_user_with_no_matching_groups(acl_service):
     allowed = acl_service.get_allowed_notebooks(["sg-sales"])
     assert allowed == ["notebook-3"]  # only wildcard
+
+@pytest.mark.asyncio
+async def test_no_duplicate_notebooks_with_wildcard_and_group_match(acl_service):
+    """Test that C2 bug is fixed - no duplicates when both wildcard and group match."""
+    # This test verifies the set() fix prevents duplicate notebook IDs
+    user_groups = [
+        {"id": "a1b2c3d4-0000-0000-0000-000000000001", "display_name": "HR Team"}
+    ]
+    allowed = await acl_service.get_allowed_notebooks(user_groups)
+
+    # Count occurrences - each notebook should appear exactly once
+    from collections import Counter
+    counts = Counter(allowed)
+    for notebook_id, count in counts.items():
+        assert count == 1, f"Notebook {notebook_id} appears {count} times (should be 1)"
+```
 ```
 
 ### Integration Tests
