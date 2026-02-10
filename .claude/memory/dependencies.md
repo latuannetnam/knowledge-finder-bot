@@ -20,6 +20,7 @@ dependencies = [
     "httpx>=0.25.0",      # ✅ Graph API client (added for ACL)
     "pyyaml>=6.0",        # ✅ ACL YAML config (added for ACL)
     "cachetools>=5.3.0",  # ✅ User info caching (added for ACL)
+    "openai>=1.59.0",     # ✅ nlm-proxy client (added for nlm integration)
 ]
 ```
 
@@ -42,8 +43,8 @@ dev = [
 |---------|---------|--------|
 | `httpx>=0.25.0` | Graph API HTTP client | ✅ Implemented (ACL phase) |
 | `pyyaml>=6.0` | ACL YAML config | ✅ Implemented (ACL phase) |
-| `cachetools>=5.3.0` | User info caching | ✅ Implemented (ACL phase) |
-| `openai>=1.0.0` | nlm-proxy client | ⏳ TODO (next phase) |
+| `cachetools>=5.3.0` | User info caching | ✅ Implemented (ACL + nlm phases) |
+| `openai>=1.59.0` | nlm-proxy client | ✅ Implemented (nlm phase) |
 | `redis>=5.0.0` | Persistent caching | ⏳ Future (optional) |
 
 ## ACL Dependencies Details
@@ -59,9 +60,16 @@ dev = [
 - Hot-reload support via `reload_config()`
 
 **cachetools** - In-memory caching
-- Used in: `bot/bot.py`
-- Cache type: TTLCache (5-min TTL, 1000 users)
-- Reduces Graph API calls by ~95%
+- Used in: `bot/bot.py` (user info), `nlm/session.py` (conversation IDs)
+- Cache types:
+  - User cache: TTLCache (5-min TTL, 1000 users) - reduces Graph API calls by ~95%
+  - Session cache: TTLCache (24-hour TTL, 1000 sessions) - multi-turn conversations
+
+**openai** - OpenAI Python SDK (AsyncOpenAI)
+- Used in: `nlm/client.py`
+- Version: >=1.59.0 (installed v2.18.0)
+- Features: Streaming responses, non-streaming fallback, SSE chunk buffering
+- Extra body: Custom metadata for `allowed_notebooks` per-request ACL
 
 ## Package Manager
 

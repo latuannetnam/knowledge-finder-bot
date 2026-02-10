@@ -45,8 +45,21 @@ graph TD
 - Ensures users can only query notebooks they are authorized to access.
 
 ### 4. nlm-proxy Integration (`src/knowledge_finder_bot/nlm/`)
-- Wraps the OpenAI Python SDK to communicate with a self-hosted `nlm-proxy` instance.
-- Translates user queries into NotebookLM interactions.
+- **NLMClient**: Wraps the OpenAI Python SDK (`AsyncOpenAI`) to communicate with nlm-proxy
+  - Streaming responses with SSE chunk buffering
+  - Non-streaming fallback support
+  - Conversation ID extraction from `system_fingerprint` (format: `conv_{id}`)
+  - Per-request ACL via `extra_body.metadata.allowed_notebooks`
+- **SessionStore**: Multi-turn conversation management
+  - TTLCache with 24-hour expiry (default)
+  - Maps Azure AD Object ID → conversation ID
+- **Response Formatter**: Source attribution in responses
+  - Extracts notebook info from `reasoning_content`
+  - Adds markdown-formatted source citations
+- **Bot Integration**: Graceful fallback and error handling
+  - Typing indicator before queries
+  - Falls back to echo mode when nlm-proxy not configured
+  - User-friendly error messages
 
 ## Technology Stack Decisions
 
@@ -62,5 +75,11 @@ graph TD
   - All logs are structured JSON for easier ingestion into observability tools.
   - Enforces consistent context (user ID, request ID) across log entries.
 
-- **Tunneling: `nport`**
-  - Provides persistent subdomains for local development, avoiding the need to update Azure Bot configuration every session.
+- **Tunneling: `devtunnel`**
+  - Microsoft-native tunneling solution for Azure Bot Service development
+  - Persistent subdomain eliminates need to update bot configuration
+
+- **nlm-proxy Client: OpenAI SDK**
+  - Uses `AsyncOpenAI` for OpenAI-compatible API (nlm-proxy)
+  - Supports both streaming (default) and non-streaming modes
+  - Custom `extra_body` parameter for per-request metadata (ACL)

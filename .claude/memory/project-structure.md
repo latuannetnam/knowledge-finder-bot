@@ -27,15 +27,24 @@ knowledge-finder-bot/
 │       │   ├── __init__.py
 │       │   ├── models.py    # Pydantic models (GroupACL, NotebookACL, ACLConfig)
 │       │   └── service.py   # ACLService (get_allowed_notebooks)
-│       ├── nlm/             # nlm-proxy client (TODO)
+│       ├── nlm/             # ✅ nlm-proxy client (IMPLEMENTED)
+│       │   ├── __init__.py
+│       │   ├── models.py    # NLMResponse Pydantic model
+│       │   ├── client.py    # NLMClient with AsyncOpenAI (streaming/non-streaming)
+│       │   ├── formatter.py # Response formatter with source attribution
+│       │   └── session.py   # SessionStore for multi-turn conversations
 │       └── channels/        # Teams/Telegram formatters (TODO)
 ├── tests/
-│   ├── conftest.py          # Updated with ACL + mock_graph_client fixtures
+│   ├── conftest.py          # Updated with ACL + nlm fixtures
 │   ├── test_config.py       # 3 tests
 │   ├── test_bot.py          # 10 tests (includes dual-mode routing tests)
-│   ├── test_acl_models.py   # ✅ 11 tests (NEW)
-│   ├── test_acl_service.py  # ✅ 14 tests (NEW)
-│   └── test_graph_client.py # ✅ 8 tests (NEW)
+│   ├── test_acl_models.py   # ✅ 11 tests
+│   ├── test_acl_service.py  # ✅ 14 tests
+│   ├── test_graph_client.py # ✅ 8 tests
+│   ├── test_nlm_client.py   # ✅ 8 tests (NEW - streaming, non-streaming, extra_body)
+│   ├── test_nlm_session.py  # ✅ 6 tests (NEW - TTL, get/set/clear)
+│   ├── test_nlm_formatter.py # ✅ 5 tests (NEW - source attribution)
+│   └── test_bot_nlm.py      # ✅ 7 tests (NEW - integration, multi-turn, errors)
 ├── config/
 │   └── acl.yaml             # ACL configuration
 ├── scripts/
@@ -60,12 +69,18 @@ knowledge-finder-bot/
 | `pyproject.toml` | Dependencies, build config |
 | `.env` | Local secrets (not in git) |
 
-## Test Coverage (46/46 passing)
+## Test Coverage (72/72 passing)
 
-| Test File | Tests | Coverage |
-|-----------|-------|----------|
-| `test_acl_models.py` | 11/11 | 100% |
-| `test_acl_service.py` | 14/14 | 100% |
-| `test_bot.py` | 10/10 | 89% (includes dual-mode routing tests) |
-| `test_graph_client.py` | 8/8 | 98% |
-| `test_config.py` | 3/3 | 94% |
+| Test File | Tests | Module Coverage |
+|-----------|-------|-----------------|
+| `test_acl_models.py` | 11/11 | acl/models.py: 100% |
+| `test_acl_service.py` | 14/14 | acl/service.py: 100% |
+| `test_bot.py` | 10/10 | bot/bot.py: 90% |
+| `test_graph_client.py` | 8/8 | auth/graph_client.py: 98% |
+| `test_nlm_client.py` | 8/8 | nlm/client.py: 100% |
+| `test_nlm_session.py` | 6/6 | nlm/session.py: 100% |
+| `test_nlm_formatter.py` | 5/5 | nlm/formatter.py: 100% |
+| `test_bot_nlm.py` | 7/7 | Integration tests |
+| `test_config.py` | 3/3 | config.py: 96% |
+
+**Overall:** 77% code coverage (416 statements, 95 missed)

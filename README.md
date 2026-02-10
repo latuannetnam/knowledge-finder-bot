@@ -2,9 +2,9 @@
 
 **A Microsoft Teams & Telegram chatbot that answers questions using Google's NotebookLM with Azure AD-based access control.**
 
-[![Status](https://img.shields.io/badge/Status-ACL_Complete-success)](./docs/architecture.md)
+[![Status](https://img.shields.io/badge/Status-nlm--proxy_Complete-success)](./docs/architecture.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](./pyproject.toml)
-[![Tests](https://img.shields.io/badge/Tests-46%2F46_passing-brightgreen)](./tests/)
+[![Tests](https://img.shields.io/badge/Tests-72%2F72_passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/Coverage-77%25-green)](./tests/)
 
 This bot allows users to query curated knowledge bases (NotebookLM notebooks) directly from their chat interface. It handles authentication, enforces notebook-level access control via Azure AD groups, and routes queries to the appropriate notebook.
@@ -15,10 +15,12 @@ This bot allows users to query curated knowledge bases (NotebookLM notebooks) di
 - ✅ **Access Control Lists (ACL)** - Control notebook access by AD group membership
 - ✅ **Wildcard Patterns** - Support public notebooks and admin groups
 - ✅ **Dual-Mode Routing** - Test ACL in Agent Playground without Azure AD setup
-- ✅ **Graceful Fallback** - Echo mode when ACL is unavailable
+- ✅ **Graceful Fallback** - Echo mode when ACL/nlm-proxy unavailable
 - ✅ **Caching** - 5-minute TTL cache for Graph API calls (reduces API load by ~95%)
 - ✅ **M365 Agents SDK** - Modern Microsoft bot framework
-- ⏳ **NotebookLM Integration** - Coming next (nlm-proxy client)
+- ✅ **NotebookLM Integration** - Query notebooks via nlm-proxy with streaming responses
+- ✅ **Multi-turn Conversations** - 24-hour session cache for context retention
+- ✅ **Source Attribution** - Responses include notebook source citations
 
 ## 🚀 Quick Start
 
@@ -63,10 +65,19 @@ User (Teams) → Azure Bot Service → Bot Backend (aiohttp:3978)
                           │                                     │
                           └──────────── Check Access ───────────┘
                                         ↓
-                          ┌─── nlm-proxy Client ────┐ (TODO)
+                          ┌─── nlm-proxy Client ────┐
                           │ POST /v1/chat/completions│
+                          │ model: knowledge-finder  │
                           │ metadata: allowed_notebooks │
-                          └──────────────────────────┘
+                          │ Streaming: SSE responses │
+                          └──────────┬───────────────┘
+                                     ↓
+                          ┌─── SessionStore ────────┐
+                          │ Multi-turn conversations│
+                          │ TTL: 24 hours           │
+                          └──────────┬──────────────┘
+                                     ↓
+                              Format \u0026 Send Response
 ```
 
 ## 📂 Repository Structure
@@ -86,16 +97,25 @@ knowledge-finder-bot/
 │       ├── auth/            # ✅ Authentication
 │       │   ├── graph_client.py     # Microsoft Graph API client
 │       │   └── mock_graph_client.py # Mock client for Agent Playground
+│       ├── nlm/             # ✅ nlm-proxy Integration
+│       │   ├── models.py    # NLMResponse Pydantic model
+│       │   ├── client.py    # NLMClient with AsyncOpenAI
+│       │   ├── formatter.py # Response formatter with source attribution
+│       │   └── session.py   # SessionStore for multi-turn conversations
 │       ├── bot/             # ✅ Bot handler
 │       │   └── bot.py       # create_agent_app() factory
 │       ├── config.py        # ✅ Pydantic settings
 │       └── main.py          # ✅ aiohttp server entrypoint
-├── tests/                   # ✅ 46/46 tests passing
+├── tests/                   # ✅ 72/72 tests passing
 │   ├── test_acl_models.py   # 11 tests (100% coverage)
 │   ├── test_acl_service.py  # 14 tests (100% coverage)
 │   ├── test_graph_client.py # 8 tests (98% coverage)
-│   ├── test_config.py       # 3 tests (94% coverage)
-│   └── test_bot.py          # 10 tests (89% coverage, includes dual-mode)
+│   ├── test_nlm_client.py   # 8 tests (100% coverage)
+│   ├── test_nlm_session.py  # 6 tests (100% coverage)
+│   ├── test_nlm_formatter.py # 5 tests (100% coverage)
+│   ├── test_bot_nlm.py      # 7 tests (integration)
+│   ├── test_config.py       # 3 tests (96% coverage)
+│   └── test_bot.py          # 10 tests (90% coverage, includes dual-mode)
 ├── config/
 │   └── acl.yaml             # ✅ ACL configuration
 ├── pyproject.toml           # Dependencies (uv)
@@ -171,15 +191,19 @@ uv run pytest tests/ -v
 uv run pytest tests/ -v --cov=knowledge_finder_bot
 
 # Run specific test file
-uv run pytest tests/test_acl_service.py -v
+uv run pytest tests/test_nlm_client.py -v
 ```
 
-**Test Results:** 46/46 tests passing (100% success rate)
+**Test Results:** 72/72 tests passing (100% success rate)
 - ACL Models: 11/11 (100% coverage)
 - ACL Service: 14/14 (100% coverage)
 - Graph API Client: 8/8 (98% coverage)
-- Config: 3/3 (94% coverage)
-- Bot Integration: 10/10 (89% coverage, includes dual-mode routing)
+- nlm-proxy Client: 8/8 (100% coverage)
+- nlm-proxy Session: 6/6 (100% coverage)
+- nlm-proxy Formatter: 5/5 (100% coverage)
+- Bot Integration (nlm): 7/7 (integration tests)
+- Bot Integration (ACL): 10/10 (90% coverage, includes dual-mode routing)
+- Config: 3/3 (96% coverage)
 
 ## 📖 Documentation
 
@@ -197,7 +221,7 @@ uv run pytest tests/test_acl_service.py -v
 - Decorator-based message handlers
 - Factory pattern with dependency injection
 
-**ACL Mechanism** (commits `5206eed` → `33f194d`)
+**ACL Mechanism** (commits `5206eed` → `cf59c42`)
 - Microsoft Graph API client with app-only authentication
 - ACL service with YAML-based configuration
 - Pydantic models with GUID validation
@@ -205,14 +229,24 @@ uv run pytest tests/test_acl_service.py -v
 - **Dual-mode routing**: Fake AAD IDs → MockGraphClient, real IDs → Graph API
 - MockGraphClient for Agent Playground testing without Azure AD
 - TTLCache for user info (5-min TTL, 1000 users)
-- Comprehensive test suite (46/46 tests passing)
+
+**nlm-proxy Integration** (branch `feature/nlm-proxy-integration`)
+- NLMClient with AsyncOpenAI SDK
+  - Streaming responses with SSE chunk buffering
+  - Non-streaming fallback
+  - Conversation ID extraction from `system_fingerprint`
+  - `extra_body` for per-request ACL metadata
+- SessionStore for multi-turn conversations (24-hour TTL)
+- Response formatter with source attribution
+- Bot integration with typing indicator and error handling
+- Comprehensive test suite (72/72 tests passing, 77% coverage)
 
 ### ⏳ Next Phase
 
-**nlm-proxy Integration**
-- OpenAI SDK client for nlm-proxy
-- Query routing based on allowed notebooks
-- Response formatting with source attribution
+**Production Deployment**
+- Manual E2E testing with nlm-proxy
+- Azure deployment configuration
+- Monitoring and observability setup
 
 ## 🔧 Environment Variables
 
@@ -234,6 +268,14 @@ GRAPH_CACHE_MAXSIZE=1000
 # Test Mode (Agent Playground testing)
 TEST_MODE=false
 TEST_USER_GROUPS=
+
+# nlm-proxy Integration (optional, falls back to echo mode)
+NLM_PROXY_URL=
+NLM_PROXY_API_KEY=
+NLM_MODEL_NAME=knowledge-finder
+NLM_TIMEOUT=60
+NLM_SESSION_TTL=86400
+NLM_SESSION_MAXSIZE=1000
 
 # Server Configuration
 HOST=0.0.0.0

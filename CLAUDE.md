@@ -246,11 +246,20 @@ Environment variables in `.env` (never commit):
 - `TEST_MODE` (default: `false`) - Enable dual-mode: fake AAD IDs → mock, real AAD IDs → Graph API
 - `TEST_USER_GROUPS` (default: `""`) - Comma-separated group IDs for MockGraphClient
 
+**nlm-proxy Configuration (optional):**
+- `NLM_PROXY_URL` - nlm-proxy endpoint URL (e.g., `http://localhost:8000/v1`)
+- `NLM_PROXY_API_KEY` - API key for nlm-proxy authentication
+- `NLM_MODEL_NAME` (default: `knowledge-finder`)
+- `NLM_TIMEOUT` (default: `60.0` seconds)
+- `NLM_SESSION_TTL` (default: `86400` seconds / 24 hours)
+- `NLM_SESSION_MAXSIZE` (default: `1000` concurrent sessions)
+
 ## Implementation Plans
 
 Detailed step-by-step guides:
 - **Migration:** `docs/plans/2025-02-09-m365-agents-migration-plan.md` ✅ Completed (commit dbeed4c)
 - **ACL Mechanism:** `docs/plans/2025-02-10-acl-mechanism.md` ✅ Completed (commits 5206eed → cf59c42)
+- **nlm-proxy Integration:** `docs/plans/2025-02-10-nlm-proxy-integration.md` ✅ Completed (72/72 tests passing)
 - **Basic (echo bot):** `docs/plans/2025-02-09-notebooklm-chatbot-basic.md`
 - **Full design:** `docs/docs\plans\notebooklm-chatbot-design-v2-fixed.md`
 
@@ -268,7 +277,23 @@ Detailed step-by-step guides:
 - Bot handler with ACL enforcement and graceful fallback (10/10 tests)
 - **Dual-mode routing**: Fake AAD IDs (Agent Playground) → MockGraphClient, real AAD IDs → Graph API
 - MockGraphClient for Agent Playground testing without Azure AD
-- Total: 46/46 tests passing, 77% code coverage
+
+**✅ nlm-proxy Integration Complete** (branch: `feature/nlm-proxy-integration`)
+- NLMClient with AsyncOpenAI SDK (8/8 tests)
+  - Streaming responses with SSE chunk buffering
+  - Non-streaming fallback
+  - Conversation ID extraction from `system_fingerprint` (format: `conv_{id}`)
+  - `extra_body` for `metadata.allowed_notebooks` per-request ACL
+- SessionStore for multi-turn conversations (6/6 tests)
+  - TTLCache with 24-hour expiry
+  - Maps AAD Object ID → conversation ID
+- Response formatter with source attribution (5/5 tests)
+- Bot integration (7/7 tests)
+  - Typing indicator before query
+  - Multi-turn conversation support
+  - Graceful error handling
+  - Fallback to echo mode when nlm-proxy not configured
+- **Total: 72/72 tests passing, 77% code coverage**
 
 ## Test Mode for Agent Playground
 

@@ -17,11 +17,16 @@ from microsoft_agents.hosting.core import (
     MemoryStorage,
 )
 from microsoft_agents.authentication.msal import MsalConnectionManager
-from microsoft_agents.activity import ConversationUpdateTypes, load_configuration_from_env
+from microsoft_agents.activity import (
+    Activity, ActivityTypes, ConversationUpdateTypes, load_configuration_from_env,
+)
 
 from knowledge_finder_bot.acl.service import ACLService
 from knowledge_finder_bot.auth.graph_client import GraphClient, UserInfo
 from knowledge_finder_bot.config import Settings
+from knowledge_finder_bot.nlm.client import NLMClient
+from knowledge_finder_bot.nlm.formatter import format_response
+from knowledge_finder_bot.nlm.session import SessionStore
 
 logger = structlog.get_logger()
 
@@ -39,6 +44,8 @@ def create_agent_app(
     graph_client: GraphClient | None = None,
     acl_service: ACLService | None = None,
     mock_graph_client=None,
+    nlm_client: NLMClient | None = None,
+    session_store: SessionStore | None = None,
 ) -> AgentApplication[TurnState]:
     """Create and configure the agent application with ACL support.
 
@@ -47,6 +54,8 @@ def create_agent_app(
         graph_client: Real Graph API client (None disables ACL for real users).
         acl_service: ACL service (None disables ACL entirely).
         mock_graph_client: Mock client for Agent Playground fake AAD IDs.
+        nlm_client: nlm-proxy client (None falls back to echo mode).
+        session_store: Multi-turn session store.
     """
     load_dotenv()
 
@@ -177,17 +186,42 @@ def create_agent_app(
             notebook_count=len(allowed_notebooks),
         )
 
-        # Echo with ACL info (nlm-proxy integration comes later)
-        notebook_names = [
-            acl_service.get_notebook_name(nb_id) or nb_id
-            for nb_id in allowed_notebooks
-        ]
-        notebooks_display = ", ".join(notebook_names)
-        await context.send_activity(
-            f"**{user_name}:** {user_message}\n\n"
-            f"---\n"
-            f"*Allowed notebooks: {notebooks_display}*"
-        )
+        # Query nlm-proxy or fall back to echo
+        if nlm_client is None:
+            # Echo with ACL info (fallback when nlm-proxy not configured)
+            notebook_names = [
+                acl_service.get_notebook_name(nb_id) or nb_id
+                for nb_id in allowed_notebooks
+            ]
+            notebooks_display = ", ".join(notebook_names)
+            await context.send_activity(
+                f"**{user_name}:** {user_message}\n\n"
+                f"---\n"
+                f"*Allowed notebooks: {notebooks_display}*"
+            )
+            return
+
+        # Send typing indicator
+        await context.send_activity(Activity(type=ActivityTypes.typing))
+
+        # Multi-turn: retrieve existing conversation_id
+        conversation_id = session_store.get(aad_object_id) if session_store else None
+
+        try:
+            nlm_response = await nlm_client.query(
+                user_message=user_message,
+                allowed_notebooks=list(allowed_notebooks),
+                conversation_id=conversation_id,
+            )
+            # Store for next turn
+            if nlm_response.conversation_id and session_store:
+                session_store.set(aad_object_id, nlm_response.conversation_id)
+
+            formatted = format_response(nlm_response, acl_service)
+            await context.send_activity(formatted)
+        except Exception as e:
+            logger.error("nlm_query_failed", error=str(e))
+            await context.send_activity("I encountered an error. Please try again.")
 
     @agent_app.error
     async def on_error(context: TurnContext, error: Exception):

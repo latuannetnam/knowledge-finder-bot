@@ -94,11 +94,27 @@ def create_app() -> Application:
     except Exception as e:
         logger.warning("acl_disabled", reason=str(e))
 
+    # Initialize nlm-proxy client (optional — graceful fallback to echo mode)
+    nlm_client = None
+    session_store = None
+    if settings.nlm_proxy_url and settings.nlm_proxy_api_key:
+        from knowledge_finder_bot.nlm import NLMClient
+        from knowledge_finder_bot.nlm.session import SessionStore
+        nlm_client = NLMClient(settings)
+        session_store = SessionStore(
+            ttl=settings.nlm_session_ttl, maxsize=settings.nlm_session_maxsize
+        )
+        logger.info("nlm_client_initialized", url=settings.nlm_proxy_url)
+    else:
+        logger.info("nlm_client_disabled", reason="NLM_PROXY_URL or NLM_PROXY_API_KEY not set")
+
     agent_app = create_agent_app(
         settings=settings,
         graph_client=graph_client,
         acl_service=acl_service,
         mock_graph_client=mock_client,
+        nlm_client=nlm_client,
+        session_store=session_store,
     )
 
     app = Application(middlewares=[jwt_authorization_middleware])

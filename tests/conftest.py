@@ -21,6 +21,8 @@ def mock_env_vars():
         "HOST": "127.0.0.1",
         "PORT": "3978",
         "LOG_LEVEL": "DEBUG",
+        "NLM_PROXY_URL": "",
+        "NLM_PROXY_API_KEY": "",
     }
     with patch.dict(os.environ, env_vars, clear=False):
         yield env_vars

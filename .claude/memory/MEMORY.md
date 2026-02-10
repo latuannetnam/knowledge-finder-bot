@@ -52,10 +52,10 @@
 
 ## Current Phase
 
-- **Status:** ✅ ACL mechanism complete with dual-mode routing
-- **Milestone:** Full ACL enforcement with TEST_MODE for Agent Playground testing
-- **Next:** Implement nlm-proxy integration (replace echo with real queries)
-- **Tests:** All passing (46/46 tests, 77% code coverage)
+- **Status:** ✅ nlm-proxy integration complete
+- **Milestone:** Full bot implementation with ACL + nlm-proxy queries
+- **Next:** Manual E2E testing + documentation updates
+- **Tests:** All passing (72/72 tests, 77% code coverage)
 
 **Recent Completion:**
 - ✅ M365 Agents SDK migration (v0.7.0)
@@ -65,6 +65,11 @@
 - ✅ Bot handler with ACL enforcement (10/10 tests)
 - ✅ **Dual-mode routing**: Fake AAD IDs → MockGraphClient, real AAD IDs → Graph API
 - ✅ MockGraphClient for Agent Playground testing without Azure AD
+- ✅ **nlm-proxy integration**: OpenAI SDK client with streaming, multi-turn, formatting (26/26 tests)
+  - NLMClient with streaming/non-streaming support (8/8 tests)
+  - SessionStore for multi-turn conversations (6/6 tests)
+  - Response formatter with source attribution (5/5 tests)
+  - Bot integration with typing indicator + error handling (7/7 tests)
 
 **Critical Feature - TEST_MODE:**
 - Enable `TEST_MODE=true` for Agent Playground ACL testing

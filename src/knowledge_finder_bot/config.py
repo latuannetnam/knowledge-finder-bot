@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     test_mode: bool = Field(False, alias="TEST_MODE")
     test_user_groups: str = Field("", alias="TEST_USER_GROUPS")  # Comma-separated group IDs
 
+    # nlm-proxy (empty defaults = optional, graceful fallback to echo)
+    nlm_proxy_url: str = Field("", alias="NLM_PROXY_URL")
+    nlm_proxy_api_key: str = Field("", alias="NLM_PROXY_API_KEY")
+    nlm_model_name: str = Field("knowledge-finder", alias="NLM_MODEL_NAME")
+    nlm_timeout: float = Field(60.0, alias="NLM_TIMEOUT")
+    nlm_session_ttl: int = Field(86400, alias="NLM_SESSION_TTL")
+    nlm_session_maxsize: int = Field(1000, alias="NLM_SESSION_MAXSIZE")
+
     # Server
     host: str = Field("0.0.0.0", alias="HOST")
     port: int = Field(3978, alias="PORT")
