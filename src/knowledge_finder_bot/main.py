@@ -1,7 +1,6 @@
 """Application entrypoint - aiohttp server with M365 Agents SDK."""
 
 import logging
-from os import environ
 
 import structlog
 from aiohttp.web import Request, Response, Application, run_app
@@ -12,23 +11,18 @@ from microsoft_agents.hosting.aiohttp import (
 )
 from microsoft_agents.hosting.core import AgentApplication
 
-from knowledge_finder_bot.bot import AGENT_APP, CONNECTION_MANAGER
+from knowledge_finder_bot.acl.service import ACLService
+from knowledge_finder_bot.auth.graph_client import GraphClient
+from knowledge_finder_bot.bot import create_agent_app
 from knowledge_finder_bot.config import get_settings
 
 
 def configure_logging(log_level: str = "INFO") -> None:
-    """Configure structlog and standard library logging.
-
-    Args:
-        log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    """
-    # Configure Python's standard library logging
+    """Configure structlog and standard library logging."""
     logging.basicConfig(
         format="%(message)s",
         level=getattr(logging, log_level.upper(), logging.INFO),
     )
-
-    # Configure structlog
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -52,7 +46,6 @@ logger = structlog.get_logger()
 
 
 async def messages(request: Request) -> Response:
-    """Handle incoming Bot Framework messages."""
     agent: AgentApplication = request.app["agent_app"]
     adapter: CloudAdapter = request.app["adapter"]
     response = await start_agent_process(request, agent, adapter)
@@ -60,31 +53,44 @@ async def messages(request: Request) -> Response:
 
 
 async def health(request: Request) -> Response:
-    """Health check endpoint."""
     from aiohttp import web
     return web.json_response({"status": "healthy"})
 
 
 async def messages_health(request: Request) -> Response:
-    """Health check for messages endpoint."""
     return Response(status=200)
 
 
 def create_app() -> Application:
-    """Create and configure the aiohttp application.
+    """Create and configure the aiohttp application."""
+    settings = get_settings()
 
-    Returns:
-        Configured aiohttp Application
-    """
-    # Create aiohttp app with JWT authorization middleware
+    # Initialize ACL components (optional — graceful fallback to echo mode)
+    graph_client = None
+    acl_service = None
+
+    try:
+        graph_client = GraphClient(
+            client_id=settings.graph_client_id,
+            client_secret=settings.graph_client_secret,
+            tenant_id=settings.app_tenant_id,
+        )
+        acl_service = ACLService(settings.acl_config_path)
+        logger.info("acl_enabled", config_path=settings.acl_config_path)
+    except Exception as e:
+        logger.warning("acl_disabled", reason=str(e))
+
+    agent_app = create_agent_app(
+        settings=settings,
+        graph_client=graph_client,
+        acl_service=acl_service,
+    )
+
     app = Application(middlewares=[jwt_authorization_middleware])
+    app["agent_configuration"] = agent_app._connection_manager.get_default_connection_configuration()
+    app["agent_app"] = agent_app
+    app["adapter"] = agent_app.adapter
 
-    # Store components for request handlers (following official MS pattern)
-    app["agent_configuration"] = CONNECTION_MANAGER.get_default_connection_configuration()
-    app["agent_app"] = AGENT_APP
-    app["adapter"] = AGENT_APP.adapter
-
-    # Add routes
     app.router.add_post("/api/messages", messages)
     app.router.add_get("/api/messages", messages_health)
     app.router.add_get("/health", health)
@@ -95,8 +101,6 @@ def create_app() -> Application:
 def main() -> None:
     """Run the bot server."""
     settings = get_settings()
-
-    # Configure logging with level from settings
     configure_logging(settings.log_level)
 
     logger.info(
