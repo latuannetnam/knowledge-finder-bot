@@ -8,36 +8,56 @@ This project uses `.claude/memory/` for detailed context. Read [MEMORY.md](.clau
 
 ## 📚 Documentation Maintenance
 
-**CRITICAL: Always update Just-in-Time documentation after completing tasks.**
+**Use the `/update-docs` skill to keep documentation synchronized with code changes.**
 
-### When to Update Documentation
+> **Installation Required:** If you don't see `/update-docs` in `/help`, install the plugin:
+> ```bash
+> ./scripts/install-plugins.sh      # Linux/Mac
+> .\scripts\install-plugins.ps1     # Windows
+> ```
+> Then restart Claude Code. See [docs/setup.md](docs/setup.md) for details.
 
-Update docs **immediately after**:
-- ✅ Adding new features or modules
-- ✅ Refactoring code structure (moving files, renaming modules)
-- ✅ Changing architecture or data flow
-- ✅ Adding/removing/updating dependencies
-- ✅ Modifying environment variables or configuration
-- ✅ Discovering bugs or creating solutions
-- ✅ Establishing new coding patterns
-- ✅ Changing development workflow or tooling
+### Automated Documentation Updates
 
-### What to Update
+This project includes an **automatic documentation update system** that:
+- ✅ Detects code changes via git (new features, dependencies, env vars, etc.)
+- ✅ Proposes documentation updates based on change classification
+- ✅ Updates relevant files after your approval
+- ✅ Optionally commits changes with conventional commit messages
+
+**Usage:**
+
+```bash
+# After completing a feature/task
+/update-docs                  # Analyze changes and propose updates
+/update-docs --auto-commit    # Propose + auto-commit after approval
+```
+
+**Proactive Detection:**
+
+When you complete a task (e.g., "✅ Feature complete, all tests passing"), the hookify rule will automatically suggest running `/update-docs`.
+
+### Documentation Update Rules (Reference)
+
+The `/update-docs` skill uses these mappings to determine which files to update:
 
 | Change Type | Files to Update |
 |-------------|-----------------|
-| **New Feature/Module** | `docs/architecture.md`, `CLAUDE.md` (components), `.claude/memory/project-structure.md` |
-| **Dependencies** | `.claude/memory/dependencies.md`, `docs/setup.md` (if prerequisites change) |
-| **Environment Variables** | `docs/setup.md`, `CLAUDE.md` (if critical), `.env.example` |
-| **Code Patterns** | `.claude/memory/patterns.md` |
-| **Bug Fixes/Solutions** | `.claude/memory/debugging.md` |
-| **Architecture Changes** | `docs/architecture.md`, `CLAUDE.md` (architecture section) |
-| **Development Tools** | `docs/setup.md`, `.claude/memory/MEMORY.md` (quick reference) |
-| **Important Decisions** | `.claude/memory/decisions.md` |
+| **New Feature/Module** | `README.md` (Features, Structure, Status), `docs/architecture.md`, `CLAUDE.md` (components), `.claude/memory/project-structure.md`, `.claude/memory/MEMORY.md` |
+| **Dependencies** | `README.md` (Prerequisites), `docs/setup.md`, `.claude/memory/dependencies.md` |
+| **Environment Variables** | `README.md` (Env Vars), `docs/setup.md`, `CLAUDE.md` (if critical), `.env.example` |
+| **Code Patterns** | `.claude/memory/patterns.md`, `docs/contributing.md` (if standard) |
+| **Bug Fixes/Solutions** | `.claude/memory/debugging.md`, `README.md` (if known issue) |
+| **Architecture Changes** | `README.md` (Architecture, Structure), `docs/architecture.md`, `CLAUDE.md` (architecture) |
+| **Development Tools** | `README.md` (Quick Start), `docs/setup.md`, `.claude/memory/MEMORY.md` |
+| **Important Decisions** | `.claude/memory/decisions.md`, `docs/architecture.md` |
+| **Test Results/Coverage** | `README.md` (badges, test results), `.claude/memory/MEMORY.md` |
+| **Deployment Changes** | `README.md`, `docs/deployment.md` |
 
-### Documentation Update Checklist
+### Manual Updates (Fallback)
 
-Before marking a task complete:
+If the skill is unavailable or you prefer manual updates:
+
 1. ✅ Identify what changed (feature, architecture, config, etc.)
 2. ✅ Update relevant documentation files from table above
 3. ✅ Update `.claude/memory/MEMORY.md` "Current Phase" if milestone reached
@@ -46,6 +66,35 @@ Before marking a task complete:
 6. ✅ Commit documentation updates WITH code changes
 
 **Remember:** Documentation is code. Outdated docs are worse than no docs.
+
+## Creating Local Skills
+
+This project uses a **local marketplace** system for sharing custom Claude Code skills via git.
+
+**Key architecture:**
+- Skills are defined in `.claude/plugins/plugins/<plugin-name>/skills/<skill-name>/SKILL.md`
+- Installed via `claude plugin marketplace add` + `claude plugin install`
+- Shared through git — team members run installation script
+
+**For complete guide, see:** [.claude/memory/creating-local-skills.md](.claude/memory/creating-local-skills.md)
+
+**Quick reference:**
+
+```
+.claude/plugins/                                    # Local marketplace
+├── .claude-plugin/marketplace.json                 # Marketplace manifest
+└── plugins/
+    └── <plugin-name>/
+        ├── .claude-plugin/plugin.json              # Plugin manifest
+        └── skills/
+            └── <skill-name>/
+                └── SKILL.md                        # Must be named SKILL.md!
+```
+
+**Critical requirements:**
+- Skill file **must** be named `SKILL.md` (not `<skill-name>.md`)
+- Skill **must** be in subdirectory (`skills/<skill-name>/SKILL.md`)
+- Frontmatter needs only `name` and `description` (no `version`, `allowed-tools`)
 
 ## Code Patterns & Standards
 

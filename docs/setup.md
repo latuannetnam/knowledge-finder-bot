@@ -21,6 +21,19 @@
    uv sync
    ```
 
+3. **Install Claude Code plugins:**
+   This project includes custom Claude Code skills for automatic documentation updates.
+   ```bash
+   # Linux/Mac
+   ./scripts/install-plugins.sh
+
+   # Windows
+   .\scripts\install-plugins.ps1
+   ```
+
+   The script registers the project's local plugin marketplace and installs the `update-docs` plugin.
+   After installation, restart Claude Code and verify with `/help | grep update-docs`.
+
 ## Environment Configuration
 
 Create a `.env` file in the root directory. You can copy `.env.example` if it exists, or use the template below.

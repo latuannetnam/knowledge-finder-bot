@@ -49,6 +49,8 @@
 | [patterns.md](./patterns.md) | Code patterns, conventions |
 | [debugging.md](./debugging.md) | Common issues, solutions |
 | [decisions.md](./decisions.md) | Architecture decisions, rationale |
+| [creating-local-skills.md](./creating-local-skills.md) | How to create local Claude Code skills |
+| [decisions.md](./decisions.md) | Architecture decisions, rationale |
 
 ## Current Phase
 

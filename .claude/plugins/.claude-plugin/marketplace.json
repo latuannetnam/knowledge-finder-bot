@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "knowledge-finder-bot-plugins",
+  "description": "Custom Claude Code plugins for the knowledge-finder-bot project",
+  "owner": {
+    "name": "knowledge-finder-bot team",
+    "email": "latuannetnam@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "update-docs",
+      "description": "Automatic documentation update system. Analyzes git changes, classifies them, and proposes documentation updates with approval workflow.",
+      "version": "1.0.0",
+      "author": {
+        "name": "knowledge-finder-bot team",
+        "email": "latuannetnam@gmail.com"
+      },
+      "source": "./plugins/update-docs",
+      "category": "productivity"
+    }
+  ]
+}
