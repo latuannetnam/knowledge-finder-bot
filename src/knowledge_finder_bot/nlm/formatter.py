@@ -1,6 +1,7 @@
 """Format nlm-proxy responses for display."""
 
 from microsoft_agents.activity import Attachment
+from microsoft_agents.hosting.core.app.streaming.citation import Citation
 
 from knowledge_finder_bot.acl.service import ACLService
 from knowledge_finder_bot.nlm.models import NLMResponse
@@ -89,3 +90,26 @@ def build_reasoning_card(reasoning_text: str) -> Attachment:
         content_type="application/vnd.microsoft.card.adaptive",
         content=card_json,
     )
+
+
+def build_source_citation(
+    notebook_id: str | None,
+    acl_service: ACLService | None = None,
+) -> Citation | None:
+    """Build a Citation object for SDK set_citations() API.
+
+    Args:
+        notebook_id: The notebook ID from the nlm-proxy response.
+        acl_service: ACL service for notebook name lookup.
+
+    Returns:
+        Citation object, or None if notebook not found.
+    """
+    if notebook_id and acl_service:
+        notebook_name = acl_service.get_notebook_name(notebook_id)
+        if notebook_name:
+            return Citation(
+                title=notebook_name,
+                content=f"Source: {notebook_name}",
+            )
+    return None

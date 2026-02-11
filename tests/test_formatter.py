@@ -1,6 +1,8 @@
 """Tests for reasoning card and citation builders."""
 
-from knowledge_finder_bot.nlm.formatter import build_reasoning_card
+from unittest.mock import MagicMock
+
+from knowledge_finder_bot.nlm.formatter import build_reasoning_card, build_source_citation
 
 
 def test_build_reasoning_card_structure():
@@ -34,3 +36,28 @@ def test_build_reasoning_card_truncation():
     actual_text = card.content["body"][1]["items"][0]["text"]
     assert len(actual_text) < 20000
     assert actual_text.endswith("...(reasoning truncated)")
+
+
+def test_build_source_citation_returns_citation():
+    """build_source_citation returns Citation with notebook name."""
+    acl = MagicMock()
+    acl.get_notebook_name.return_value = "HR Docs"
+
+    citation = build_source_citation("hr-notebook", acl)
+
+    assert citation is not None
+    assert citation.title == "HR Docs"
+    assert "HR Docs" in citation.content
+
+
+def test_build_source_citation_returns_none_when_no_notebook():
+    """build_source_citation returns None when notebook not found."""
+    assert build_source_citation(None, None) is None
+
+
+def test_build_source_citation_returns_none_when_name_not_found():
+    """build_source_citation returns None when ACL has no name for ID."""
+    acl = MagicMock()
+    acl.get_notebook_name.return_value = None
+
+    assert build_source_citation("unknown-id", acl) is None
