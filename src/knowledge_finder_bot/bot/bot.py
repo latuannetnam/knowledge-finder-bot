@@ -26,7 +26,12 @@ from knowledge_finder_bot.acl.service import ACLService
 from knowledge_finder_bot.auth.graph_client import GraphClient, UserInfo
 from knowledge_finder_bot.config import Settings
 from knowledge_finder_bot.nlm.client import NLMClient
-from knowledge_finder_bot.nlm.formatter import format_response, format_source_attribution
+from knowledge_finder_bot.nlm.formatter import (
+    format_response,
+    format_source_attribution,
+    build_reasoning_card,
+    build_source_citation,
+)
 from knowledge_finder_bot.nlm.session import SessionStore
 
 logger = structlog.get_logger()
@@ -217,7 +222,9 @@ def create_agent_app(
         conversation_id = session_store.get(aad_object_id) if session_store else None
         notebook_id = None
         new_conversation_id = None
-        sent_separator = False
+        reasoning_text = ""
+        reasoning_started = False
+        sent_separator = False  # Still used by buffered path (removed in Task 6)
 
         try:
             if use_streaming:
@@ -239,17 +246,27 @@ def create_agent_app(
                             new_conversation_id = chunk.conversation_id
 
                     elif chunk.chunk_type == "reasoning":
-                        streaming.queue_text_chunk(chunk.text)
+                        reasoning_text += chunk.text
+                        if not reasoning_started:
+                            reasoning_started = True
+                            streaming.queue_informative_update(
+                                "Analyzing your question..."
+                            )
 
                     elif chunk.chunk_type == "content":
-                        if not sent_separator:
-                            streaming.queue_text_chunk("\n\n---\n\n")
-                            sent_separator = True
                         streaming.queue_text_chunk(chunk.text)
 
-                source_line = format_source_attribution(notebook_id, acl_service)
-                if source_line:
-                    streaming.queue_text_chunk(source_line)
+                # Attach reasoning as collapsible Adaptive Card
+                if reasoning_text:
+                    streaming.set_attachments(
+                        [build_reasoning_card(reasoning_text)]
+                    )
+
+                # Source attribution via citations API
+                citation = build_source_citation(notebook_id, acl_service)
+                if citation:
+                    streaming.queue_text_chunk(" [doc1]")
+                    streaming.set_citations([citation])
 
                 await streaming.end_stream()
             else:
