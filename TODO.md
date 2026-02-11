@@ -1,5 +1,6 @@
 # Planning
 - [Doing] Implement nlm-proxy client integration
+- [ ] Auto-doc agent skill: automatic document new changes
 - [ ] Remove legacy MICROSOFT_APP_ID settings
 - [ ] Optimize bot conversation management
 
