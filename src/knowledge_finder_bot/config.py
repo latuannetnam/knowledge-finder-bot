@@ -13,10 +13,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Azure Bot Registration
-    app_id: str = Field(..., alias="MICROSOFT_APP_ID")
-    app_password: str = Field(..., alias="MICROSOFT_APP_PASSWORD")
-    app_tenant_id: str = Field(..., alias="MICROSOFT_APP_TENANT_ID")
+    # Azure Bot Registration - Legacy (not used currently)
+    # app_id: str = Field(..., alias="MICROSOFT_APP_ID")
+    # app_password: str = Field(..., alias="MICROSOFT_APP_PASSWORD")
+    # app_tenant_id: str = Field(..., alias="MICROSOFT_APP_TENANT_ID")
 
     # Graph API Client
     graph_client_id: str = Field(..., alias="GRAPH_CLIENT_ID")
