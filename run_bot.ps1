@@ -1,0 +1,1 @@
+uv run python -m knowledge_finder_bot.main

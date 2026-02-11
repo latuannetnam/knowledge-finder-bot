@@ -1,5 +1,6 @@
 # Planning
 - [Doing] Implement nlm-proxy client integration
+- [ ] Remove legacy MICROSOFT_APP_ID settings
 - [ ] Optimize bot conversation management
 
 # Done
