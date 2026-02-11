@@ -35,6 +35,7 @@
 | Package Manager | `uv` (not pip) |
 | Run Commands | `uv run python -m knowledge_finder_bot.main` |
 | Test Commands | `uv run pytest tests/ -v` |
+| Update Docs | `/update-docs` (auto-detect changes) |
 | Tunnel Tool | devtunnel (`.\run_devtunnel.ps1`) |
 | Local Testing | Agent Playground (`.\run_agentplayground.ps1`) |
 | Local Port | 3978 |
@@ -55,23 +56,17 @@
 ## Current Phase
 
 - **Status:** ✅ Dual-mode response delivery (streaming + buffered) complete
-- **Milestone:** Fixed non-streaming channels (emulator/Agent Playground) receiving buffered responses
+- **Milestone:** Refined UI with Reasoning Cards & Source Citations
 - **Next:** Production deployment, Teams E2E testing
 - **Tests:** All passing (90/90 tests)
 
 **Recent Completion:**
-- ✅ M365 Agents SDK migration (v0.7.0)
-- ✅ Graph API client with app-only authentication (8/8 tests)
-- ✅ ACL service with YAML-based access control (14/14 tests)
-- ✅ Pydantic models with GUID validation (11/11 tests)
-- ✅ Bot handler with ACL enforcement (10/10 tests)
+- ✅ **UI Improvements**:
+  - Implemented `build_reasoning_card` for collapsible Adaptive Cards
+  - Added `build_source_citation` for standardized citations
+  - Separated reasoning logic from content in streaming/buffered modes
 - ✅ **Dual-mode routing**: Fake AAD IDs → MockGraphClient, real AAD IDs → Graph API
-- ✅ MockGraphClient for Agent Playground testing without Azure AD
-- ✅ **nlm-proxy integration**: OpenAI SDK client with streaming, multi-turn, formatting (26/26 tests)
-  - NLMClient with streaming/non-streaming support (8/8 tests)
-  - SessionStore for multi-turn conversations (6/6 tests)
-  - Response formatter with source attribution (5/5 tests)
-  - Bot integration with typing indicator + error handling (7/7 tests)
+- ✅ **nlm-proxy integration**: OpenAI SDK client with streaming, multi-turn, formatting
 
 **Critical Feature - TEST_MODE:**
 - Enable `TEST_MODE=true` for Agent Playground ACL testing

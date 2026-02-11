@@ -21,7 +21,7 @@ git diff HEAD --name-status
 
 ### Recent Commit
 ```bash
-git log -1 --pretty=format:"%h %s%n%b"
+git log -10 --pretty=format:"%h %s%n%b"
 ```
 
 ### Dependency Changes
