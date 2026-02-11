@@ -245,35 +245,30 @@ AFTER:  User → StreamingResponse(context)
 
 ---
 
-### ADR-011: Dual-Mode Response Delivery (Streaming vs Buffered)
+### ADR-012: Adaptive Cards for Reasoning Content
 
 **Date:** 2025-02-11
 
-**Decision:** Detect whether the channel supports streaming via `StreamingResponse._is_streaming_channel` and fall back to buffered `context.send_activity()` for non-streaming channels.
+**Decision:** Use Adaptive Cards with `Action.ToggleVisibility` to display reasoning content, rather than streaming it directly as plain text.
 
 **Rationale:**
-- M365 SDK `StreamingResponse` only streams for Teams (`msteams`), DirectLine (`directline`), and explicit `delivery_mode == "stream"`
-- Agent Playground uses the `emulator` channel, which is **not** in the streaming list
-- When `_is_streaming_channel = False`, `queue_text_chunk()` silently discards all intermediate chunks — only `end_stream()` sends the final message
-- Users on non-streaming channels saw a blank wait followed by the entire response at once
-- The SDK's silent discard behavior is by design but unintuitive — no error, no warning
+- **User Focus:** Users primarily want the answer. Raw reasoning text (which can be verbose) distracts from the final response.
+- **Transparency:** We still want to expose the reasoning for trust/verification, but keep it optional.
+- **UI Experience:** A collapsible "Show reasoning" section keeps the chat history clean while preserving the "thinking" context.
+- **Streaming Compatibility:** We can accumulate reasoning chunks during the stream and attach the card at the end (or update it in place if supported, but attachment at end is safer for V1).
 
 **Implementation:**
-- Check `streaming._is_streaming_channel` after constructing `StreamingResponse`
-- **Streaming path** (Teams, DirectLine): Use `StreamingResponse` with `queue_text_chunk()` + `end_stream()` as before
-- **Buffered path** (emulator, webchat, etc.): Send typing indicator, buffer all chunks into `full_text`, then `context.send_activity(full_text)`
-- Unified error handling: both paths use `context.send_activity()` for errors
-- Added `Activity` import for typing indicator in buffered path
+- **Streaming Mode:** Reasoning chunks are accumulated in memory. When stream ends, an Adaptive Card attachment is added to the message.
+- **Buffered Mode:** Same approach—reasoning text is collected and attached to the final `Activity`.
+- **Truncation:** Reasoning text is truncated at 15,000 characters to fit within Adaptive Card limits.
 
 **Consequences:**
-- Non-streaming channels now receive the complete response (previously silently lost intermediate chunks)
-- Added 3 new tests for buffered mode (90/90 tests total)
-- Streaming channels (Teams) behavior unchanged
-- Log entry `nlm_query_start` now includes `use_streaming` and `channel_id` for diagnostics
+- Requires `microsoft-agents-activity` (already present).
+- Adds `formatter.py` logic for card construction.
+- Reasoning is not streamed token-by-token *visually* to the user (it's hidden/accumulated), only the status update ("Analyzing...") is shown. The answer *is* streamed.
 
----
+**Implementation:** Completed (5/5 formatter tests passing).
 
-## Template for New Decisions
 
 ```markdown
 ### ADR-XXX: [Title]
