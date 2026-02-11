@@ -293,7 +293,8 @@ Detailed step-by-step guides:
 - Informative status update with notebook name ("Searching HR Docs...")
 - Reasoning + separator + answer content streamed to user
 - Source attribution appended at stream end
-- **Total: 87/87 tests passing**
+- **Dual-mode delivery:** Streaming channels (Teams, DirectLine) use `StreamingResponse`; non-streaming channels (emulator, webchat) fall back to buffered `send_activity()`
+- **Total: 90/90 tests passing**
 
 ## Test Mode for Agent Playground
 

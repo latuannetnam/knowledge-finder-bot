@@ -245,6 +245,34 @@ AFTER:  User → StreamingResponse(context)
 
 ---
 
+### ADR-011: Dual-Mode Response Delivery (Streaming vs Buffered)
+
+**Date:** 2025-02-11
+
+**Decision:** Detect whether the channel supports streaming via `StreamingResponse._is_streaming_channel` and fall back to buffered `context.send_activity()` for non-streaming channels.
+
+**Rationale:**
+- M365 SDK `StreamingResponse` only streams for Teams (`msteams`), DirectLine (`directline`), and explicit `delivery_mode == "stream"`
+- Agent Playground uses the `emulator` channel, which is **not** in the streaming list
+- When `_is_streaming_channel = False`, `queue_text_chunk()` silently discards all intermediate chunks — only `end_stream()` sends the final message
+- Users on non-streaming channels saw a blank wait followed by the entire response at once
+- The SDK's silent discard behavior is by design but unintuitive — no error, no warning
+
+**Implementation:**
+- Check `streaming._is_streaming_channel` after constructing `StreamingResponse`
+- **Streaming path** (Teams, DirectLine): Use `StreamingResponse` with `queue_text_chunk()` + `end_stream()` as before
+- **Buffered path** (emulator, webchat, etc.): Send typing indicator, buffer all chunks into `full_text`, then `context.send_activity(full_text)`
+- Unified error handling: both paths use `context.send_activity()` for errors
+- Added `Activity` import for typing indicator in buffered path
+
+**Consequences:**
+- Non-streaming channels now receive the complete response (previously silently lost intermediate chunks)
+- Added 3 new tests for buffered mode (90/90 tests total)
+- Streaming channels (Teams) behavior unchanged
+- Log entry `nlm_query_start` now includes `use_streaming` and `channel_id` for diagnostics
+
+---
+
 ## Template for New Decisions
 
 ```markdown

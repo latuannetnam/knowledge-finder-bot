@@ -52,10 +52,10 @@
 
 ## Current Phase
 
-- **Status:** ✅ End-to-end streaming complete
-- **Milestone:** Real-time streaming from nlm-proxy to users via M365 StreamingResponse
-- **Next:** Manual E2E testing with Agent Playground + production deployment
-- **Tests:** All passing (87/87 tests)
+- **Status:** ✅ Dual-mode response delivery (streaming + buffered) complete
+- **Milestone:** Fixed non-streaming channels (emulator/Agent Playground) receiving buffered responses
+- **Next:** Production deployment, Teams E2E testing
+- **Tests:** All passing (90/90 tests)
 
 **Recent Completion:**
 - ✅ M365 Agents SDK migration (v0.7.0)
@@ -119,5 +119,5 @@ curl http://localhost:3978/health
 ## Related Docs
 
 - **Developer Guide:** `CLAUDE.md` (root) - Commands, architecture, components
-- **Design:** `docs/plans/notebooklm-chatbot-design.md`
+- **Design:** `docs\plans\notebooklm-chatbot-design-v2-fixed.md`
 - **Azure Setup:** `docs/plans/azure-app-registration-guide.md`

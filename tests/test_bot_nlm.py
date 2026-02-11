@@ -66,6 +66,7 @@ def mock_streaming_response():
     sr.queue_text_chunk = MagicMock()
     sr.end_stream = AsyncMock()
     sr.set_generated_by_ai_label = MagicMock()
+    sr._is_streaming_channel = True
     return sr
 
 
@@ -238,7 +239,7 @@ async def test_streaming_conversation_id_reused(nlm_app, mock_nlm_client, sessio
 
 @pytest.mark.asyncio
 async def test_streaming_error_sends_error_message(nlm_app, mock_nlm_client, mock_streaming_response):
-    """Exception during streaming sends error via end_stream."""
+    """Exception during streaming sends error via context.send_activity."""
     async def _error_stream(**kwargs):
         yield NLMChunk(chunk_type="meta", model="hr-notebook")
         raise Exception("Stream broken")
@@ -257,13 +258,102 @@ async def test_streaming_error_sends_error_message(nlm_app, mock_nlm_client, moc
     ):
         await nlm_app.on_turn(context)
 
-    # Error message should be sent via queue_text_chunk + end_stream
-    text_calls = [
-        call[0][0] for call in mock_streaming_response.queue_text_chunk.call_args_list
+    # Error message should be sent via context.send_activity
+    send_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if isinstance(call[0][0], str)
     ]
-    error_found = any("error" in t.lower() for t in text_calls)
-    assert error_found, f"Error message not found in: {text_calls}"
-    mock_streaming_response.end_stream.assert_awaited()
+    error_found = any("error" in t.lower() for t in send_calls)
+    assert error_found, f"Error message not found in: {send_calls}"
+
+
+@pytest.mark.asyncio
+async def test_buffered_mode_for_non_streaming_channel(nlm_app, mock_nlm_client):
+    """Non-streaming channels (emulator) get buffered response via send_activity."""
+    mock_sr = MagicMock()
+    mock_sr._is_streaming_channel = False
+    mock_sr.set_generated_by_ai_label = MagicMock()
+
+    context = create_mock_context(
+        activity_type="message",
+        text="What is the leave policy?",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_sr,
+    ):
+        await nlm_app.on_turn(context)
+
+    # Should send via context.send_activity, not StreamingResponse
+    send_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if isinstance(call[0][0], str)
+    ]
+    combined = " ".join(send_calls)
+    assert "leave policy" in combined
+    assert "allows 20 days" in combined
+
+
+@pytest.mark.asyncio
+async def test_buffered_mode_includes_source_attribution(nlm_app, mock_nlm_client):
+    """Non-streaming buffered response includes source attribution."""
+    mock_sr = MagicMock()
+    mock_sr._is_streaming_channel = False
+    mock_sr.set_generated_by_ai_label = MagicMock()
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_sr,
+    ):
+        await nlm_app.on_turn(context)
+
+    send_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if isinstance(call[0][0], str)
+    ]
+    combined = " ".join(send_calls)
+    assert "Source: HR Docs" in combined
+
+
+@pytest.mark.asyncio
+async def test_buffered_mode_error_sends_error_message(nlm_app, mock_nlm_client):
+    """Non-streaming error sends error via context.send_activity."""
+    async def _error_stream(**kwargs):
+        yield NLMChunk(chunk_type="meta", model="hr-notebook")
+        raise Exception("Stream broken")
+
+    mock_nlm_client.query_stream = MagicMock(side_effect=lambda **kw: _error_stream(**kw))
+
+    mock_sr = MagicMock()
+    mock_sr._is_streaming_channel = False
+    mock_sr.set_generated_by_ai_label = MagicMock()
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_sr,
+    ):
+        await nlm_app.on_turn(context)
+
+    send_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if isinstance(call[0][0], str)
+    ]
+    error_found = any("error" in t.lower() for t in send_calls)
+    assert error_found, f"Error message not found in: {send_calls}"
 
 
 @pytest.mark.asyncio

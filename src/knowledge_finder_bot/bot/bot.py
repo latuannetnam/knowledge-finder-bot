@@ -18,7 +18,7 @@ from microsoft_agents.hosting.core import (
 )
 from microsoft_agents.authentication.msal import MsalConnectionManager
 from microsoft_agents.activity import (
-    ConversationUpdateTypes, load_configuration_from_env,
+    Activity, ConversationUpdateTypes, load_configuration_from_env,
 )
 from microsoft_agents.hosting.aiohttp.app.streaming.streaming_response import StreamingResponse
 
@@ -202,9 +202,17 @@ def create_agent_app(
             )
             return
 
-        # --- Streaming nlm-proxy query ---
+        # --- nlm-proxy query ---
         streaming = StreamingResponse(context)
         streaming.set_generated_by_ai_label(True)
+        use_streaming = streaming._is_streaming_channel
+
+        logger.info(
+            "nlm_query_start",
+            user_name=user_name,
+            use_streaming=use_streaming,
+            channel_id=str(getattr(context.activity, "channel_id", None)),
+        )
 
         conversation_id = session_store.get(aad_object_id) if session_store else None
         notebook_id = None
@@ -212,57 +220,84 @@ def create_agent_app(
         sent_separator = False
 
         try:
-            async for chunk in nlm_client.query_stream(
-                user_message=user_message,
-                allowed_notebooks=list(allowed_notebooks),
-                conversation_id=conversation_id,
-            ):
-                if chunk.chunk_type == "meta":
-                    if chunk.model and notebook_id is None:
-                        notebook_id = chunk.model
-                        nb_name = acl_service.get_notebook_name(notebook_id)
-                        if nb_name:
-                            streaming.queue_informative_update(
-                                f"Searching {nb_name}..."
-                            )
-                    if chunk.conversation_id:
-                        new_conversation_id = chunk.conversation_id
+            if use_streaming:
+                # Streaming channel (Teams, DirectLine) — use StreamingResponse
+                async for chunk in nlm_client.query_stream(
+                    user_message=user_message,
+                    allowed_notebooks=list(allowed_notebooks),
+                    conversation_id=conversation_id,
+                ):
+                    if chunk.chunk_type == "meta":
+                        if chunk.model and notebook_id is None:
+                            notebook_id = chunk.model
+                            nb_name = acl_service.get_notebook_name(notebook_id)
+                            if nb_name:
+                                streaming.queue_informative_update(
+                                    f"Searching {nb_name}..."
+                                )
+                        if chunk.conversation_id:
+                            new_conversation_id = chunk.conversation_id
 
-                elif chunk.chunk_type == "reasoning":
-                    streaming.queue_text_chunk(chunk.text)
+                    elif chunk.chunk_type == "reasoning":
+                        streaming.queue_text_chunk(chunk.text)
 
-                elif chunk.chunk_type == "content":
-                    if not sent_separator:
-                        streaming.queue_text_chunk("\n\n---\n\n")
-                        sent_separator = True
-                    streaming.queue_text_chunk(chunk.text)
+                    elif chunk.chunk_type == "content":
+                        if not sent_separator:
+                            streaming.queue_text_chunk("\n\n---\n\n")
+                            sent_separator = True
+                        streaming.queue_text_chunk(chunk.text)
 
-            source_line = format_source_attribution(notebook_id, acl_service)
-            if source_line:
-                streaming.queue_text_chunk(source_line)
+                source_line = format_source_attribution(notebook_id, acl_service)
+                if source_line:
+                    streaming.queue_text_chunk(source_line)
 
-            await streaming.end_stream()
+                await streaming.end_stream()
+            else:
+                # Non-streaming channel (emulator, webchat) — buffer + send_activity
+                await context.send_activity(Activity(type="typing"))
+
+                full_text = ""
+                async for chunk in nlm_client.query_stream(
+                    user_message=user_message,
+                    allowed_notebooks=list(allowed_notebooks),
+                    conversation_id=conversation_id,
+                ):
+                    if chunk.chunk_type == "meta":
+                        if chunk.model and notebook_id is None:
+                            notebook_id = chunk.model
+                        if chunk.conversation_id:
+                            new_conversation_id = chunk.conversation_id
+
+                    elif chunk.chunk_type == "reasoning":
+                        full_text += chunk.text
+
+                    elif chunk.chunk_type == "content":
+                        if not sent_separator:
+                            full_text += "\n\n---\n\n"
+                            sent_separator = True
+                        full_text += chunk.text
+
+                source_line = format_source_attribution(notebook_id, acl_service)
+                if source_line:
+                    full_text += source_line
+
+                await context.send_activity(full_text)
 
             if new_conversation_id and session_store:
                 session_store.set(aad_object_id, new_conversation_id)
 
             logger.info(
-                "nlm_stream_delivered",
+                "nlm_query_delivered",
                 notebook_id=notebook_id,
                 conversation_id=new_conversation_id,
+                use_streaming=use_streaming,
             )
 
         except Exception as e:
-            logger.error("nlm_stream_failed", error=str(e))
-            try:
-                streaming.queue_text_chunk(
-                    "I encountered an error. Please try again."
-                )
-                await streaming.end_stream()
-            except Exception:
-                await context.send_activity(
-                    "I encountered an error. Please try again."
-                )
+            logger.error("nlm_query_failed", error=str(e), use_streaming=use_streaming)
+            await context.send_activity(
+                "I encountered an error. Please try again."
+            )
 
     @agent_app.error
     async def on_error(context: TurnContext, error: Exception):

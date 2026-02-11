@@ -134,9 +134,33 @@ curl (Get-Content .devtunnel-endpoint).Replace('/api/messages', '/health')
 - Endpoint file: Contains `https://xxx.devtunnels.ms/api/messages`
 - Health check: `{"status": "ok"}` with HTTP 200
 
+### StreamingResponse Not Streaming (Buffered Instead)
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| Bot sends complete response at once instead of streaming | Channel not recognized as streaming-capable by SDK | Fixed: bot auto-detects `_is_streaming_channel` and falls back to buffered `send_activity()` |
+| `queue_text_chunk()` calls are silently ignored | `StreamingResponse._is_streaming_channel = False` | Only Teams (`msteams`) and DirectLine (`directline`) support streaming |
+| Agent Playground shows no streaming | Emulator channel not in SDK's streaming channel list | Expected: emulator gets buffered response, Teams gets streaming |
+
+**Root Cause (ADR-011):** The M365 SDK `StreamingResponse._set_defaults()` only enables streaming for 3 channel types:
+- `msteams` → streaming (1.0s interval)
+- `directline` → streaming (0.5s interval)
+- `delivery_mode == "stream"` → streaming (0.1s interval)
+- **Everything else (emulator, webchat, etc.) → `_is_streaming_channel = False`**
+
+When `_is_streaming_channel = False`:
+- `queue_informative_update()` → no-op (returns immediately)
+- `queue_text_chunk()` → accumulates text but `create_activity()` returns `None` (never sent)
+- Only `end_stream()` sends the final complete message
+
+**How to diagnose:** Check `chatbot.log` for `use_streaming=True/False` in `nlm_query_start` log entry.
+
 ## Logging
 
 Logs use structlog with ISO timestamps. Check terminal for:
 - `starting_bot_server` - Server started
 - `message_received` - User sent message
+- `nlm_query_start` - NLM query initiated (shows `use_streaming` and `channel_id`)
+- `nlm_query_delivered` - Response delivered successfully
+- `nlm_query_failed` - Query error occurred
 - `Error processing activity` - Something went wrong
