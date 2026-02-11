@@ -7,7 +7,6 @@ from aiohttp.web import Request, Response, Application, run_app
 from microsoft_agents.hosting.aiohttp import (
     CloudAdapter,
     start_agent_process,
-    jwt_authorization_middleware,
 )
 from microsoft_agents.hosting.core import AgentApplication
 
@@ -53,6 +52,7 @@ async def messages(request: Request) -> Response:
 
 
 async def health(request: Request) -> Response:
+    """Health check endpoint - no authentication required."""
     from aiohttp import web
     return web.json_response({"status": "healthy"})
 
@@ -117,7 +117,7 @@ def create_app() -> Application:
         session_store=session_store,
     )
 
-    app = Application(middlewares=[jwt_authorization_middleware])
+    app = Application()
     app["agent_configuration"] = agent_app._connection_manager.get_default_connection_configuration()
     app["agent_app"] = agent_app
     app["adapter"] = agent_app.adapter

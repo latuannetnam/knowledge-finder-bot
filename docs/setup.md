@@ -66,6 +66,12 @@ LOG_LEVEL=INFO
    - Expose your local server via HTTPS
    - Save the endpoint URL to `.devtunnel-endpoint`
 
+   **Important Notes:**
+   - If you see "Exiting. Stop the existing host process..." - **this is normal!** Your tunnel is already running from a previous session.
+   - The script detects existing tunnels to prevent duplicates
+   - Check `.devtunnel-endpoint` file for the active endpoint URL
+   - Only restart if you experience actual connectivity issues (see Troubleshooting section)
+
 3. **Test with Agent Playground:**
    ```powershell
    .\run_agentplayground.ps1
@@ -82,3 +88,41 @@ LOG_LEVEL=INFO
 - **Agent Playground:** The official testing tool for M365 bots. Run `.\run_agentplayground.ps1` for automatic configuration.
 - **Logs:** The application uses structured logging. Check the console output for JSON-formatted logs.
 - **Devtunnel Status:** Check `.devtunnel-endpoint` file or run `devtunnel show knowledge-finder-bot`.
+
+## Troubleshooting
+
+See [`.claude/memory/debugging.md`](.claude/memory/debugging.md) for comprehensive troubleshooting guide.
+
+### Common Devtunnel Scenarios
+
+**Scenario 1: "Exiting. Stop the existing host process first if you need to restart."**
+
+This is **normal behavior** - your tunnel is already running! The script prevents starting duplicate tunnels.
+
+```powershell
+# Check saved endpoint
+Get-Content .devtunnel-endpoint
+
+# Verify tunnel is working
+devtunnel show knowledge-finder-bot
+```
+
+**Scenario 2: Need to restart tunnel**
+
+```powershell
+# Stop existing tunnel
+Get-Process devtunnel | Stop-Process
+
+# Start fresh tunnel
+.\run_devtunnel.ps1
+```
+
+**Scenario 3: Tunnel unreachable after inactivity**
+
+The script auto-recovers from stale connections. Just run:
+
+```powershell
+.\run_devtunnel.ps1
+```
+
+If it detects a stale connection (ghost process), it will automatically delete and recreate the tunnel.

@@ -30,11 +30,28 @@ if (-not (Get-Command devtunnel -ErrorAction SilentlyContinue)) {
 # --- 3. Login Check ---
 Write-Host "Checking login status..." -ForegroundColor Gray
 try {
-    $null = devtunnel user show 2>&1
-    Write-Host "Authenticated." -ForegroundColor Green
+    $UserInfo = devtunnel user show --json 2>&1 | ConvertFrom-Json
+    if ($UserInfo.status -eq "Logged in") {
+        Write-Host "Authenticated as: $($UserInfo.username)" -ForegroundColor Green
+    } else {
+        throw "Not authenticated"
+    }
 } catch {
-    Write-Host "Not authenticated. Launching login..." -ForegroundColor Yellow
+    Write-Host "Not authenticated or token expired. Launching login..." -ForegroundColor Yellow
     devtunnel user login
+
+    # Verify login succeeded
+    try {
+        $UserInfo = devtunnel user show --json 2>&1 | ConvertFrom-Json
+        if ($UserInfo.status -eq "Logged in") {
+            Write-Host "Authentication successful." -ForegroundColor Green
+        } else {
+            throw "Login failed"
+        }
+    } catch {
+        Write-Error "Authentication failed. Please try running 'devtunnel user login' manually."
+        exit 1
+    }
 }
 
 # --- 4. Create/Configure Tunnel ---
@@ -63,18 +80,47 @@ try {
 Write-Host "Checking if tunnel is already hosted..." -ForegroundColor Gray
 $TunnelStatus = devtunnel show $TunnelId --json | ConvertFrom-Json
 if ($TunnelStatus.tunnel.hostConnections -gt 0) {
-    Write-Host "Tunnel is already being hosted (Host connections: $($TunnelStatus.tunnel.hostConnections))." -ForegroundColor Yellow
-    Write-Host "If you need the endpoint URL, check the .devtunnel-endpoint file or the existing host process." -ForegroundColor Cyan
+    Write-Host "Tunnel reports active connections (Host connections: $($TunnelStatus.tunnel.hostConnections))." -ForegroundColor Yellow
 
-    # Try to read saved endpoint if available
-    $EndpointFile = Join-Path $PSScriptRoot ".devtunnel-endpoint"
-    if (Test-Path $EndpointFile) {
-        $SavedEndpoint = Get-Content $EndpointFile -Raw
-        Write-Host "Saved endpoint: $SavedEndpoint" -ForegroundColor Magenta
+    # Check for actual devtunnel host process
+    $HostProcess = Get-Process | Where-Object {
+        $_.ProcessName -eq "devtunnel" -and $_.CommandLine -like "*host*$TunnelId*"
     }
 
-    Write-Host "Exiting. Stop the existing host process first if you need to restart." -ForegroundColor Yellow
-    exit 0
+    if ($HostProcess) {
+        Write-Host "Active devtunnel host process found (PID: $($HostProcess.Id))." -ForegroundColor Green
+
+        # Try to read saved endpoint
+        $EndpointFile = Join-Path $PSScriptRoot ".devtunnel-endpoint"
+        if (Test-Path $EndpointFile) {
+            $SavedEndpoint = Get-Content $EndpointFile -Raw
+            Write-Host "Saved endpoint: $SavedEndpoint" -ForegroundColor Magenta
+        }
+
+        Write-Host "Exiting. Stop the existing host process first if you need to restart." -ForegroundColor Yellow
+        exit 0
+    } else {
+        Write-Host "No active host process found, but connection count is non-zero. Likely a stale connection." -ForegroundColor Yellow
+        Write-Host "Attempting to reset tunnel by deleting and recreating..." -ForegroundColor Cyan
+
+        try {
+            devtunnel delete $TunnelId --force 2>&1 | Out-Null
+            Write-Host "Deleted stale tunnel." -ForegroundColor Green
+
+            # Recreate tunnel
+            Write-Host "Creating fresh tunnel '$TunnelId'..." -ForegroundColor Yellow
+            devtunnel create $TunnelId --allow-anonymous --expiration 30d
+
+            # Recreate port
+            Write-Host "Creating port $Port..." -ForegroundColor Yellow
+            devtunnel port create $TunnelId -p $Port --protocol http
+
+            Write-Host "Tunnel recreated successfully." -ForegroundColor Green
+        } catch {
+            Write-Error "Failed to reset tunnel: $_"
+            exit 1
+        }
+    }
 }
 
 # --- 7. Start Tunnel and Capture URL ---
@@ -116,9 +162,37 @@ while (-not $EndpointCaptured -and $Elapsed -lt $Timeout) {
 
 if (-not $EndpointCaptured) {
     Write-Warning "Failed to capture tunnel endpoint URL within $Timeout seconds."
-} else {
-    Write-Host "`nTunnel is now running. Press Ctrl+C to stop." -ForegroundColor Cyan
+    Write-Warning "The tunnel may still be starting. Check 'devtunnel list' for status."
+
+    # Give it a bit more time to see if it's just slow
+    Write-Host "Waiting additional 10 seconds for tunnel to stabilize..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 10
+
+    # Try to get the URL from devtunnel show command as fallback
+    try {
+        $TunnelInfo = devtunnel show $TunnelId --json | ConvertFrom-Json
+        if ($TunnelInfo.tunnel.ports -and $TunnelInfo.tunnel.ports.Count -gt 0) {
+            $PortUri = $TunnelInfo.tunnel.ports[0].portUri
+            if ($PortUri) {
+                $BotEndpoint = "$PortUri/api/messages"
+                $BotEndpoint | Set-Content (Join-Path $PSScriptRoot ".devtunnel-endpoint")
+                Write-Host "Endpoint recovered from tunnel info: $BotEndpoint" -ForegroundColor Green
+                $EndpointCaptured = $true
+            }
+        }
+    } catch {
+        Write-Warning "Could not retrieve endpoint from tunnel info: $_"
+    }
+
+    if (-not $EndpointCaptured) {
+        Write-Error "Tunnel started but endpoint is unavailable. Stopping tunnel."
+        Stop-Job -Job $Job -ErrorAction SilentlyContinue
+        Remove-Job -Job $Job -ErrorAction SilentlyContinue
+        exit 1
+    }
 }
+
+Write-Host "`nTunnel is now running. Press Ctrl+C to stop." -ForegroundColor Cyan
 
 # Wait for the job (keeps script running and forwards output)
 try {

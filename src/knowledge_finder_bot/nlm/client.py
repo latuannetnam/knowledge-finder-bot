@@ -97,13 +97,29 @@ class NLMClient:
         )
 
         model_emitted = False
+        chunk_count = 0
 
         async for chunk in stream:
+            chunk_count += 1
             chunk_model = chunk.model if chunk.model else None
             sys_fp = chunk.system_fingerprint
             parsed_conv_id = _parse_conversation_id(sys_fp) if sys_fp else None
 
+            logger.debug(
+                "nlm_chunk_received",
+                chunk_number=chunk_count,
+                has_model=chunk_model is not None,
+                has_system_fingerprint=sys_fp is not None,
+                num_choices=len(chunk.choices),
+            )
+
             if (chunk_model and not model_emitted) or parsed_conv_id:
+                logger.debug(
+                    "nlm_chunk_meta_emit",
+                    chunk_type="meta",
+                    model=chunk_model if not model_emitted else None,
+                    conversation_id=parsed_conv_id,
+                )
                 yield NLMChunk(
                     chunk_type="meta",
                     model=chunk_model if not model_emitted else None,
@@ -117,18 +133,39 @@ class NLMClient:
 
                 reasoning = getattr(delta, "reasoning_content", None)
                 if reasoning:
+                    logger.debug(
+                        "nlm_chunk_reasoning_emit",
+                        chunk_type="reasoning",
+                        text_length=len(reasoning),
+                        text_preview=reasoning[:50] if len(reasoning) > 50 else reasoning,
+                    )
                     yield NLMChunk(chunk_type="reasoning", text=reasoning)
 
                 if delta.content:
+                    logger.debug(
+                        "nlm_chunk_content_emit",
+                        chunk_type="content",
+                        text_length=len(delta.content),
+                        text_preview=delta.content[:50] if len(delta.content) > 50 else delta.content,
+                    )
                     yield NLMChunk(chunk_type="content", text=delta.content)
 
                 if choice.finish_reason:
+                    logger.debug(
+                        "nlm_chunk_finish_emit",
+                        chunk_type="meta",
+                        finish_reason=choice.finish_reason,
+                    )
                     yield NLMChunk(
                         chunk_type="meta",
                         finish_reason=choice.finish_reason,
                     )
 
-        logger.info("nlm_stream_complete", model=self._model)
+        logger.info(
+            "nlm_stream_complete",
+            model=self._model,
+            total_chunks_received=chunk_count,
+        )
 
     async def _query_streaming(
         self, user_message: str, extra_body: dict
