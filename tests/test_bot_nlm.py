@@ -335,8 +335,8 @@ async def test_streaming_error_sends_error_message(nlm_app, mock_nlm_client, moc
 
 
 @pytest.mark.asyncio
-async def test_buffered_mode_for_non_streaming_channel(nlm_app, mock_nlm_client):
-    """Non-streaming channels (emulator) get buffered response via send_activity."""
+async def test_buffered_mode_answer_without_reasoning(nlm_app, mock_nlm_client):
+    """Non-streaming: answer in text, reasoning excluded from text body."""
     mock_sr = MagicMock()
     mock_sr._is_streaming_channel = False
     mock_sr.set_generated_by_ai_label = MagicMock()
@@ -353,19 +353,28 @@ async def test_buffered_mode_for_non_streaming_channel(nlm_app, mock_nlm_client)
     ):
         await nlm_app.on_turn(context)
 
-    # Should send via context.send_activity, not StreamingResponse
-    send_calls = [
+    # Find the Activity object sent (skip typing indicator)
+    activity_calls = [
         call[0][0] for call in context.send_activity.call_args_list
-        if isinstance(call[0][0], str)
+        if hasattr(call[0][0], "text") and getattr(call[0][0], "type", None) == "message"
     ]
-    combined = " ".join(send_calls)
-    assert "leave policy" in combined
-    assert "allows 20 days" in combined
+    assert len(activity_calls) == 1
+    response = activity_calls[0]
+
+    # Answer text present, reasoning excluded
+    assert "leave policy" in response.text
+    assert "allows 20 days" in response.text
+    assert "Looking in HR docs" not in response.text
+
+    # Reasoning in Adaptive Card attachment
+    assert response.attachments is not None
+    assert len(response.attachments) == 1
+    assert response.attachments[0].content_type == "application/vnd.microsoft.card.adaptive"
 
 
 @pytest.mark.asyncio
 async def test_buffered_mode_includes_source_attribution(nlm_app, mock_nlm_client):
-    """Non-streaming buffered response includes source attribution."""
+    """Non-streaming buffered response includes text-based source attribution."""
     mock_sr = MagicMock()
     mock_sr._is_streaming_channel = False
     mock_sr.set_generated_by_ai_label = MagicMock()
@@ -382,12 +391,13 @@ async def test_buffered_mode_includes_source_attribution(nlm_app, mock_nlm_clien
     ):
         await nlm_app.on_turn(context)
 
-    send_calls = [
+    # Find the Activity object sent
+    activity_calls = [
         call[0][0] for call in context.send_activity.call_args_list
-        if isinstance(call[0][0], str)
+        if hasattr(call[0][0], "text") and getattr(call[0][0], "type", None) == "message"
     ]
-    combined = " ".join(send_calls)
-    assert "Source: HR Docs" in combined
+    assert len(activity_calls) == 1
+    assert "Source: HR Docs" in activity_calls[0].text
 
 
 @pytest.mark.asyncio
