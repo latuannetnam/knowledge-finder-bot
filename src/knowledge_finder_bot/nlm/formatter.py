@@ -1,7 +1,11 @@
 """Format nlm-proxy responses for display."""
 
+from microsoft_agents.activity import Attachment
+
 from knowledge_finder_bot.acl.service import ACLService
 from knowledge_finder_bot.nlm.models import NLMResponse
+
+_MAX_REASONING_LENGTH = 15000
 
 
 def format_response(response: NLMResponse, acl_service: ACLService | None = None) -> str:
@@ -35,3 +39,53 @@ def format_source_attribution(
         if notebook_name:
             return f"\n---\n*Source: {notebook_name}*"
     return None
+
+
+def build_reasoning_card(reasoning_text: str) -> Attachment:
+    """Build an Adaptive Card with collapsible reasoning section.
+
+    Args:
+        reasoning_text: Accumulated reasoning content from the LLM.
+
+    Returns:
+        Attachment containing the Adaptive Card.
+    """
+    if len(reasoning_text) > _MAX_REASONING_LENGTH:
+        reasoning_text = reasoning_text[:_MAX_REASONING_LENGTH] + "\n\n...(reasoning truncated)"
+
+    card_json = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.5",
+        "body": [
+            {
+                "type": "ActionSet",
+                "actions": [
+                    {
+                        "type": "Action.ToggleVisibility",
+                        "title": "Show reasoning",
+                        "targetElements": ["reasoning-container"],
+                    }
+                ],
+            },
+            {
+                "type": "Container",
+                "id": "reasoning-container",
+                "isVisible": False,
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": reasoning_text,
+                        "wrap": True,
+                        "size": "Small",
+                        "isSubtle": True,
+                    }
+                ],
+            },
+        ],
+    }
+
+    return Attachment(
+        content_type="application/vnd.microsoft.card.adaptive",
+        content=card_json,
+    )
