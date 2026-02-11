@@ -5,7 +5,7 @@ set -e
 
 MARKETPLACE_NAME="knowledge-finder-bot-plugins"
 MARKETPLACE_PATH="./.claude/plugins"
-PLUGIN_NAME="update-docs"
+PLUGIN_NAME="update-knowledge-bot-docs"
 
 echo "Installing Claude Code plugins..."
 
@@ -50,5 +50,5 @@ echo "Plugin installed successfully!"
 echo ""
 echo "Next steps:"
 echo "1. Restart Claude Code"
-echo "2. Verify: /help | grep update-docs"
-echo "3. Use: /update-docs"
+echo "2. Verify: /help | grep update-knowledge-bot-docs"
+echo "3. Use: /update-knowledge-bot-docs"

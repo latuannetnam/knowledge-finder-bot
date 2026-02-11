@@ -1,5 +1,5 @@
 ---
-name: update-docs
+name: update-knowledge-bot-docs
 description: Analyze code changes and propose documentation updates
 ---
 

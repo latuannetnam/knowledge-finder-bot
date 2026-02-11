@@ -15,8 +15,8 @@ Automatic documentation update system for the knowledge-finder-bot project.
 ## Usage
 
 ```
-/update-docs                  # Analyze changes and propose updates
-/update-docs --auto-commit    # Propose + auto-commit after approval
+/update-knowledge-bot-docs                  # Analyze changes and propose updates
+/update-knowledge-bot-docs --auto-commit    # Propose + auto-commit after approval
 ```
 
 ## Integration

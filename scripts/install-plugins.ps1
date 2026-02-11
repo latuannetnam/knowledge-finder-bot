@@ -2,7 +2,7 @@
 
 $MarketplaceName = "knowledge-finder-bot-plugins"
 $MarketplacePath = ".\.claude\plugins"
-$PluginName = "update-docs"
+$PluginName = "update-knowledge-bot-docs"
 
 Write-Host "Installing Claude Code plugins..." -ForegroundColor Cyan
 
@@ -49,5 +49,5 @@ Write-Host "Plugin installed successfully!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "1. Restart Claude Code"
-Write-Host "2. Verify: /help | grep update-docs"
-Write-Host "3. Use: /update-docs"
+Write-Host "2. Verify: /help | grep update-knowledge-bot-docs"
+Write-Host "3. Use: /update-knowledge-bot-docs"

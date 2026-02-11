@@ -1,6 +1,6 @@
 {
-  "name": "update-docs",
-  "version": "1.0.1",
+  "name": "update-knowledge-bot-docs",
+  "version": "1.0.2",
   "description": "Automatic documentation update system for knowledge-finder-bot",
   "author": {
     "name": "knowledge-finder-bot team",

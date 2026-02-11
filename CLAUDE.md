@@ -8,9 +8,9 @@ This project uses `.claude/memory/` for detailed context. Read [MEMORY.md](.clau
 
 ## 📚 Documentation Maintenance
 
-**Use the `/update-docs` skill to keep documentation synchronized with code changes.**
+**Use the `/update-knowledge-bot-docs` skill to keep documentation synchronized with code changes.**
 
-> **Installation Required:** If you don't see `/update-docs` in `/help`, install the plugin:
+> **Installation Required:** If you don't see `/update-knowledge-bot-docs` in `/help`, install the plugin:
 > ```bash
 > ./scripts/install-plugins.sh      # Linux/Mac
 > .\scripts\install-plugins.ps1     # Windows
@@ -29,17 +29,17 @@ This project includes an **automatic documentation update system** that:
 
 ```bash
 # After completing a feature/task
-/update-docs                  # Analyze changes and propose updates
-/update-docs --auto-commit    # Propose + auto-commit after approval
+/update-knowledge-bot-docs                  # Analyze changes and propose updates
+/update-knowledge-bot-docs --auto-commit    # Propose + auto-commit after approval
 ```
 
 **Proactive Detection:**
 
-When you complete a task (e.g., "✅ Feature complete, all tests passing"), the hookify rule will automatically suggest running `/update-docs`.
+When you complete a task (e.g., "✅ Feature complete, all tests passing"), the hookify rule will automatically suggest running `/update-knowledge-bot-docs`.
 
 ### Documentation Update Rules (Reference)
 
-The `/update-docs` skill uses these mappings to determine which files to update:
+The `/update-knowledge-bot-docs` skill uses these mappings to determine which files to update:
 
 | Change Type | Files to Update |
 |-------------|-----------------|
