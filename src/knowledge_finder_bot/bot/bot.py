@@ -224,7 +224,6 @@ def create_agent_app(
         new_conversation_id = None
         reasoning_text = ""
         reasoning_started = False
-        sent_separator = False  # Still used by buffered path (removed in Task 6)
 
         try:
             if use_streaming:
@@ -273,7 +272,7 @@ def create_agent_app(
                 # Non-streaming channel (emulator, webchat) — buffer + send_activity
                 await context.send_activity(Activity(type="typing"))
 
-                full_text = ""
+                answer_text = ""
                 async for chunk in nlm_client.query_stream(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
@@ -286,19 +285,27 @@ def create_agent_app(
                             new_conversation_id = chunk.conversation_id
 
                     elif chunk.chunk_type == "reasoning":
-                        full_text += chunk.text
+                        reasoning_text += chunk.text
 
                     elif chunk.chunk_type == "content":
-                        if not sent_separator:
-                            full_text += "\n\n---\n\n"
-                            sent_separator = True
-                        full_text += chunk.text
+                        answer_text += chunk.text
 
+                # Source attribution as text (buffered channels don't support ClientCitation)
                 source_line = format_source_attribution(notebook_id, acl_service)
                 if source_line:
-                    full_text += source_line
+                    answer_text += source_line
 
-                await context.send_activity(full_text)
+                # Attach reasoning as Adaptive Card if available
+                attachments = []
+                if reasoning_text:
+                    attachments.append(build_reasoning_card(reasoning_text))
+
+                response_activity = Activity(
+                    type="message",
+                    text=answer_text,
+                    attachments=attachments if attachments else None,
+                )
+                await context.send_activity(response_activity)
 
             if new_conversation_id and session_store:
                 session_store.set(aad_object_id, new_conversation_id)
