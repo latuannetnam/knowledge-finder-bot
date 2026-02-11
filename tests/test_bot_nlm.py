@@ -66,6 +66,8 @@ def mock_streaming_response():
     sr.queue_text_chunk = MagicMock()
     sr.end_stream = AsyncMock()
     sr.set_generated_by_ai_label = MagicMock()
+    sr.set_attachments = MagicMock()
+    sr.set_citations = MagicMock()
     sr._is_streaming_channel = True
     return sr
 
@@ -113,8 +115,8 @@ async def test_streaming_query_stream_called(nlm_app, mock_nlm_client, mock_stre
 
 
 @pytest.mark.asyncio
-async def test_streaming_content_sent_via_queue_text_chunk(nlm_app, mock_nlm_client, mock_streaming_response):
-    """Content chunks are piped to StreamingResponse.queue_text_chunk."""
+async def test_streaming_only_answer_in_text_chunks(nlm_app, mock_nlm_client, mock_streaming_response):
+    """Only content chunks are streamed — reasoning is excluded from text."""
     context = create_mock_context(
         activity_type="message",
         text="Hello",
@@ -130,17 +132,17 @@ async def test_streaming_content_sent_via_queue_text_chunk(nlm_app, mock_nlm_cli
     text_calls = [
         call[0][0] for call in mock_streaming_response.queue_text_chunk.call_args_list
     ]
-    # Should contain reasoning, separator, content chunks, and source attribution
     combined = "".join(text_calls)
-    assert "Looking in HR docs" in combined  # reasoning
-    assert "---" in combined  # separator
-    assert "leave policy" in combined  # content
-    assert "allows 20 days" in combined  # content
+    # Content should be present
+    assert "leave policy" in combined
+    assert "allows 20 days" in combined
+    # Reasoning must NOT leak into text stream
+    assert "Looking in HR docs" not in combined
 
 
 @pytest.mark.asyncio
-async def test_streaming_informative_update_with_notebook_name(nlm_app, mock_nlm_client, mock_streaming_response):
-    """queue_informative_update called with notebook name."""
+async def test_streaming_informative_updates_notebook_and_reasoning(nlm_app, mock_nlm_client, mock_streaming_response):
+    """Two informative updates: notebook search + analyzing question."""
     context = create_mock_context(
         activity_type="message",
         text="Hello",
@@ -153,9 +155,12 @@ async def test_streaming_informative_update_with_notebook_name(nlm_app, mock_nlm
     ):
         await nlm_app.on_turn(context)
 
-    mock_streaming_response.queue_informative_update.assert_called_once()
-    info_text = mock_streaming_response.queue_informative_update.call_args[0][0]
-    assert "HR Docs" in info_text
+    info_calls = [
+        call[0][0] for call in mock_streaming_response.queue_informative_update.call_args_list
+    ]
+    assert len(info_calls) == 2
+    assert "HR Docs" in info_calls[0]
+    assert "Analyzing" in info_calls[1]
 
 
 @pytest.mark.asyncio
@@ -177,8 +182,8 @@ async def test_streaming_end_stream_called(nlm_app, mock_nlm_client, mock_stream
 
 
 @pytest.mark.asyncio
-async def test_streaming_source_attribution_appended(nlm_app, mock_nlm_client, mock_streaming_response):
-    """Source attribution is the last text chunk before end_stream."""
+async def test_streaming_source_via_citations_api(nlm_app, mock_nlm_client, mock_streaming_response):
+    """Source attribution uses set_citations() with [doc1] marker in text."""
     context = create_mock_context(
         activity_type="message",
         text="Hello",
@@ -191,11 +196,73 @@ async def test_streaming_source_attribution_appended(nlm_app, mock_nlm_client, m
     ):
         await nlm_app.on_turn(context)
 
+    # set_citations called with one Citation
+    mock_streaming_response.set_citations.assert_called_once()
+    citations = mock_streaming_response.set_citations.call_args[0][0]
+    assert len(citations) == 1
+    assert citations[0].title == "HR Docs"
+
+    # Text must contain [doc1] marker for citation rendering
     text_calls = [
         call[0][0] for call in mock_streaming_response.queue_text_chunk.call_args_list
     ]
-    last_text = text_calls[-1]
-    assert "*Source: HR Docs*" in last_text
+    combined = "".join(text_calls)
+    assert "[doc1]" in combined
+
+
+@pytest.mark.asyncio
+async def test_streaming_reasoning_in_adaptive_card(nlm_app, mock_nlm_client, mock_streaming_response):
+    """Reasoning text sent as collapsible Adaptive Card attachment."""
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    mock_streaming_response.set_attachments.assert_called_once()
+    attachments = mock_streaming_response.set_attachments.call_args[0][0]
+    assert len(attachments) == 1
+    assert attachments[0].content_type == "application/vnd.microsoft.card.adaptive"
+
+    card_body = attachments[0].content["body"]
+    reasoning_container = card_body[1]
+    assert reasoning_container["id"] == "reasoning-container"
+    assert reasoning_container["isVisible"] is False
+    assert "Looking in HR docs" in reasoning_container["items"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_streaming_no_reasoning_no_card(nlm_app, mock_nlm_client, mock_streaming_response):
+    """When no reasoning chunks arrive, no Adaptive Card is attached."""
+    async def _content_only_stream(**kwargs):
+        yield NLMChunk(chunk_type="meta", model="hr-notebook")
+        yield NLMChunk(chunk_type="content", text="Direct answer.")
+        yield NLMChunk(chunk_type="meta", conversation_id="conv-456")
+        yield NLMChunk(chunk_type="meta", finish_reason="stop")
+
+    mock_nlm_client.query_stream = MagicMock(
+        side_effect=lambda **kw: _content_only_stream(**kw)
+    )
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    mock_streaming_response.set_attachments.assert_not_called()
 
 
 @pytest.mark.asyncio
