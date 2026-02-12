@@ -1,6 +1,6 @@
 # Planning
 
-- [ ] Optimize bot conversation history management
+- [ ] Optimize bot conversation history management: request rewrite with conversation history, conversation memory etc.
 - [ ] Migrate all Claude skills to Antigravity
 
 # Done

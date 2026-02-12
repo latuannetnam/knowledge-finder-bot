@@ -45,13 +45,10 @@ class ACLService:
                     if isinstance(group, GroupACL):
                         admin_group_ids.add(group.group_id)
 
-                # User is admin - return all real notebooks
+                # User is admin - return wildcard to grant access to ALL notebooks
+                # (not just those defined in acl.yaml)
                 if admin_group_ids & user_group_ids:
-                    all_notebooks = {
-                        nb.id for nb in self._acl_config.notebooks
-                        if nb.id != "*"
-                    }
-                    return sorted(all_notebooks)
+                    return ["*"]
 
         # Regular per-notebook matching
         allowed: set[str] = set()
@@ -73,6 +70,11 @@ class ACLService:
                 allowed.add(notebook.id)
 
         return sorted(allowed)
+
+    @staticmethod
+    def is_wildcard_access(allowed_notebooks: list[str]) -> bool:
+        """Check if the notebooks list represents unrestricted access."""
+        return allowed_notebooks == ["*"]
 
     def get_notebook_name(self, notebook_id: str) -> str | None:
         for notebook in self._acl_config.notebooks:

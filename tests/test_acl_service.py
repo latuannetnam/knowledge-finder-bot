@@ -107,29 +107,33 @@ class TestGetAllowedNotebooks:
         )
         assert result == ["public-notebook"]
 
-    def test_admin_group_gets_all_notebooks(self, acl_service):
-        """User in IT Admins group (id: '*' notebook) gets all real notebooks."""
+    def test_admin_group_gets_wildcard_access(self, acl_service):
+        """User in IT Admins group (id: '*' notebook) gets wildcard access."""
         result = acl_service.get_allowed_notebooks(
             {"99999999-aaaa-bbbb-cccc-dddddddddddd"}  # IT Admins
         )
-        # Should get all notebooks except the wildcard notebook itself
-        assert "eng-notebook" in result
-        assert "hr-notebook" in result
-        assert "public-notebook" in result
-        assert "locked-notebook" in result
-        assert "*" not in result  # wildcard notebook itself excluded
+        # Should return ["*"] sentinel for unrestricted access
+        assert result == ["*"]
+        assert ACLService.is_wildcard_access(result)
 
-    def test_admin_plus_regular_group_no_duplicates(self, acl_service):
-        """User in both admin and regular groups - no duplicate notebooks."""
+    def test_admin_plus_regular_group_gets_wildcard(self, acl_service):
+        """User in both admin and regular groups - still gets wildcard."""
         result = acl_service.get_allowed_notebooks(
             {
                 "99999999-aaaa-bbbb-cccc-dddddddddddd",  # IT Admins (all notebooks)
                 "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",  # HR Team
             }
         )
-        # Should get all notebooks (via admin), no duplicates
-        assert len(result) == len(set(result))
-        assert "hr-notebook" in result
+        # Admin group takes precedence - returns wildcard
+        assert result == ["*"]
+        assert ACLService.is_wildcard_access(result)
+
+    def test_is_wildcard_access_false_for_regular(self, acl_service):
+        """is_wildcard_access returns False for regular notebook lists."""
+        result = acl_service.get_allowed_notebooks(
+            {"cccccccc-dddd-eeee-ffff-000000000000"}
+        )
+        assert not ACLService.is_wildcard_access(result)
 
     def test_no_matching_groups_gets_only_wildcard_group_notebook(self, acl_service):
         result = acl_service.get_allowed_notebooks(

@@ -197,31 +197,39 @@ def create_agent_app(
             )
             return
 
-        # Format notebooks as "id (name)" for logging
-        notebooks_display = [
-            f"{nb_id} ({acl_service.get_notebook_name(nb_id) or 'Unknown'})"
-            for nb_id in allowed_notebooks
-        ]
+        # Format notebooks for logging
+        is_wildcard = ACLService.is_wildcard_access(allowed_notebooks)
+        if is_wildcard:
+            notebooks_display = ["* (All Notebooks)"]
+        else:
+            notebooks_display = [
+                f"{nb_id} ({acl_service.get_notebook_name(nb_id) or 'Unknown'})"
+                for nb_id in allowed_notebooks
+            ]
 
         logger.info(
             "acl_granted",
             user_name=user_info.display_name,
             notebook_count=len(allowed_notebooks),
             notebooks=notebooks_display,
+            wildcard_access=is_wildcard,
         )
 
         # Query nlm-proxy or fall back to echo
         if nlm_client is None:
             # Echo with ACL info (fallback when nlm-proxy not configured)
-            notebook_names = [
-                acl_service.get_notebook_name(nb_id) or nb_id
-                for nb_id in allowed_notebooks
-            ]
-            notebooks_display = ", ".join(notebook_names)
+            if is_wildcard:
+                notebooks_display_str = "All Notebooks (wildcard access)"
+            else:
+                notebook_names = [
+                    acl_service.get_notebook_name(nb_id) or nb_id
+                    for nb_id in allowed_notebooks
+                ]
+                notebooks_display_str = ", ".join(notebook_names)
             await context.send_activity(
                 f"**{user_name}:** {user_message}\n\n"
                 f"---\n"
-                f"*Allowed notebooks: {notebooks_display}*"
+                f"*Allowed notebooks: {notebooks_display_str}*"
             )
             return
 
