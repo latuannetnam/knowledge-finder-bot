@@ -126,19 +126,24 @@ def create_agent_app(
 
         # Pick the right client: fake AAD ID → mock, real AAD ID → Graph API
         is_fake = _is_fake_aad_id(aad_object_id)
-        if is_fake and has_mock:
-            active_client = mock_graph_client
-            source = "mock"
-        elif has_real:
-            active_client = graph_client
-            source = "graph_api"
-        elif has_mock:
+        if is_fake:
+            # Agent Playground fake AAD ID → mock client
+            if not has_mock:
+                logger.error("mock_client_unavailable", aad_object_id=aad_object_id)
+                await context.send_activity("Test mode is not configured.")
+                return
             active_client = mock_graph_client
             source = "mock"
         else:
-            logger.error("no_graph_client_available", aad_object_id=aad_object_id)
-            await context.send_activity("Unable to verify your permissions.")
-            return
+            # Real AAD ID → Graph API client (never mock!)
+            if not has_real:
+                logger.error("graph_client_unavailable", aad_object_id=aad_object_id)
+                await context.send_activity(
+                    "Graph API is not configured. Please contact your administrator."
+                )
+                return
+            active_client = graph_client
+            source = "graph_api"
 
         logger.info(
             "message_received",

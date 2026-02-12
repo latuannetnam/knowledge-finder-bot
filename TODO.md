@@ -1,6 +1,6 @@
 # Planning
+- [ ] Check weather the MICROSOFT_APP_TENANT_ID variable is required for Graph API client or we need only CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID
 - [ ] Optimize bot conversation history management
-
 
 # Done
 - [Done] Structure logging system
