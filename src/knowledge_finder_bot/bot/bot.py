@@ -230,12 +230,18 @@ def create_agent_app(
         # --- nlm-proxy query ---
         streaming = StreamingResponse(context)
         streaming.set_generated_by_ai_label(True)
-        use_streaming = streaming._is_streaming_channel
+
+        # Teams Streaming API only works in personal (1:1) scope.
+        # Group chats and channels return BadArgument error, so fall back to buffered mode.
+        conversation_type = getattr(context.activity.conversation, "conversation_type", None)
+        is_personal_scope = conversation_type == "personal" or conversation_type is None
+        use_streaming = streaming._is_streaming_channel and is_personal_scope
 
         logger.info(
             "nlm_query_start",
             user_name=user_name,
             use_streaming=use_streaming,
+            conversation_type=conversation_type,
             channel_id=str(getattr(context.activity, "channel_id", None)),
         )
 
@@ -265,7 +271,7 @@ def create_agent_app(
                             new_conversation_id = chunk.conversation_id
 
                     elif chunk.chunk_type == "reasoning":
-                        reasoning_text += chunk.text
+                        reasoning_text += chunk.text or ""
                         if not reasoning_started:
                             reasoning_started = True
                             streaming.queue_informative_update(
@@ -273,7 +279,8 @@ def create_agent_app(
                             )
 
                     elif chunk.chunk_type == "content":
-                        streaming.queue_text_chunk(chunk.text)
+                        if chunk.text:
+                            streaming.queue_text_chunk(chunk.text)
 
                 # Attach reasoning as collapsible Adaptive Card
                 if reasoning_text:
@@ -305,10 +312,10 @@ def create_agent_app(
                             new_conversation_id = chunk.conversation_id
 
                     elif chunk.chunk_type == "reasoning":
-                        reasoning_text += chunk.text
+                        reasoning_text += chunk.text or ""
 
                     elif chunk.chunk_type == "content":
-                        answer_text += chunk.text
+                        answer_text += chunk.text or ""
 
                 # Source attribution as text (buffered channels don't support ClientCitation)
                 source_line = format_source_attribution(notebook_id, acl_service)

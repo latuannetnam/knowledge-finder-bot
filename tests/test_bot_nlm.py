@@ -14,6 +14,7 @@ def create_mock_context(
     activity_type: str,
     text: str = None,
     aad_object_id: str = None,
+    conversation_type: str = "personal",
 ):
     """Create a mock turn context for bot tests."""
     context = MagicMock()
@@ -29,6 +30,8 @@ def create_mock_context(
     context.activity.recipient = MagicMock()
     context.activity.recipient.id = "bot-id"
     context.activity.members_added = None
+    context.activity.conversation = MagicMock()
+    context.activity.conversation.conversation_type = conversation_type
 
     return context
 
