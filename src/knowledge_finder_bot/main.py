@@ -16,12 +16,55 @@ from knowledge_finder_bot.bot import create_agent_app
 from knowledge_finder_bot.config import get_settings
 
 
-def configure_logging(log_level: str = "INFO") -> None:
-    """Configure structlog and standard library logging."""
-    logging.basicConfig(
-        format="%(message)s",
-        level=getattr(logging, log_level.upper(), logging.INFO),
-    )
+def configure_logging(
+    log_level: str = "INFO",
+    log_file: str = "",
+    log_file_max_bytes: int = 10_485_760,
+    log_file_backup_count: int = 5,
+) -> None:
+    """Configure structlog and standard library logging.
+    
+    Args:
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Path to log file. Empty string = console only.
+        log_file_max_bytes: Max size per log file before rotation (default: 10 MB)
+        log_file_backup_count: Number of rotated backup files to keep (default: 5)
+    """
+    from logging.handlers import RotatingFileHandler
+    from pathlib import Path
+    
+    # Determine log level
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    # Configure root logger
+    root_logger = logging.root
+    root_logger.setLevel(level)
+    
+    # Clear existing handlers
+    root_logger.handlers.clear()
+    
+    # Always add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    root_logger.addHandler(console_handler)
+    
+    # Conditionally add file handler with rotation
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        file_handler = RotatingFileHandler(
+            filename=log_file,
+            maxBytes=log_file_max_bytes,
+            backupCount=log_file_backup_count,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(logging.Formatter("%(message)s"))
+        root_logger.addHandler(file_handler)
+    
+    # Configure structlog processors
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -32,7 +75,8 @@ def configure_logging(log_level: str = "INFO") -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.dev.ConsoleRenderer(),
+            # Use JSONRenderer for file, ConsoleRenderer for console
+            structlog.processors.JSONRenderer() if log_file else structlog.dev.ConsoleRenderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
@@ -132,7 +176,12 @@ def create_app() -> Application:
 def main() -> None:
     """Run the bot server."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(
+        log_level=settings.log_level,
+        log_file=settings.log_file,
+        log_file_max_bytes=settings.log_file_max_bytes,
+        log_file_backup_count=settings.log_file_backup_count,
+    )
 
     logger.info(
         "starting_bot_server",

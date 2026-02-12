@@ -24,3 +24,10 @@ def test_settings_has_acl_defaults(settings: Settings):
     assert settings.acl_config_path == "config/acl.yaml"
     assert settings.graph_cache_ttl == 300
     assert settings.graph_cache_maxsize == 1000
+
+
+def test_settings_has_logging_file_defaults(settings: Settings):
+    """Test that file logging settings have correct defaults."""
+    assert settings.log_file == ""
+    assert settings.log_file_max_bytes == 10_485_760  # 10 MB
+    assert settings.log_file_backup_count == 5

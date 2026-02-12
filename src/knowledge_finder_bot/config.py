@@ -49,6 +49,9 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field("INFO", alias="LOG_LEVEL")
+    log_file: str = Field("", alias="LOG_FILE")  # Empty = disabled (console only)
+    log_file_max_bytes: int = Field(10_485_760, alias="LOG_FILE_MAX_BYTES")  # 10 MB
+    log_file_backup_count: int = Field(5, alias="LOG_FILE_BACKUP_COUNT")
 
 
 def get_settings() -> Settings:
