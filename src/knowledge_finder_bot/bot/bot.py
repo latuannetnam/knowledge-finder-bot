@@ -45,6 +45,10 @@ def _is_fake_aad_id(aad_object_id: str) -> bool:
     return aad_object_id.startswith(_FAKE_AAD_PREFIX)
 
 
+class KnowledgeFinderAgentApplication(AgentApplication[TurnState]):
+    _connection_manager: MsalConnectionManager
+
+
 def create_agent_app(
     settings: Settings,
     graph_client: GraphClient | None = None,
@@ -52,7 +56,7 @@ def create_agent_app(
     mock_graph_client=None,
     nlm_client: NLMClient | None = None,
     session_store: SessionStore | None = None,
-) -> AgentApplication[TurnState]:
+) -> KnowledgeFinderAgentApplication:
     """Create and configure the agent application with ACL support.
 
     Args:
@@ -72,7 +76,7 @@ def create_agent_app(
     adapter = CloudAdapter(connection_manager=connection_manager)
     authorization = Authorization(storage, connection_manager, **agents_sdk_config)
 
-    agent_app = AgentApplication[TurnState](
+    agent_app = KnowledgeFinderAgentApplication(
         storage=storage,
         adapter=adapter,
         authorization=authorization,
