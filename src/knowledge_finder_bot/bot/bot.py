@@ -173,6 +173,10 @@ def create_agent_app(
             "user_authenticated",
             user_name=user_info.display_name,
             group_count=len(user_info.groups),
+            groups=[
+                f"{g['id']} ({g.get('display_name', 'Unknown')})"
+                for g in user_info.groups
+            ],
         )
 
         # Check ACL

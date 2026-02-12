@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     )
 
     # Azure Bot Registration - Legacy (not used currently)
-    # app_id: str = Field(..., alias="MICROSOFT_APP_ID")
-    # app_password: str = Field(..., alias="MICROSOFT_APP_PASSWORD")
+    app_id: str = Field(..., alias="MICROSOFT_APP_ID")
+    app_password: str = Field(..., alias="MICROSOFT_APP_PASSWORD")
 
     # Tenant ID (shared by Bot and Graph API)
     app_tenant_id: str = Field(..., alias="MICROSOFT_APP_TENANT_ID")
