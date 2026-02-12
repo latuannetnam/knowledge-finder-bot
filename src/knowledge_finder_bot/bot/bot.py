@@ -186,10 +186,17 @@ def create_agent_app(
             )
             return
 
+        # Format notebooks as "id (name)" for logging
+        notebooks_display = [
+            f"{nb_id} ({acl_service.get_notebook_name(nb_id) or 'Unknown'})"
+            for nb_id in allowed_notebooks
+        ]
+
         logger.info(
             "acl_granted",
             user_name=user_info.display_name,
             notebook_count=len(allowed_notebooks),
+            notebooks=notebooks_display,
         )
 
         # Query nlm-proxy or fall back to echo

@@ -1,6 +1,6 @@
 # Planning
-- [ ] Remove legacy MICROSOFT_APP_ID settings
-- [ ] Optimize bot conversation management
+- [ ] Optimize bot conversation history management
+
 
 # Done
 - [Done] Structure logging system
@@ -12,3 +12,4 @@
 - [Done] Test bot streaming response
 - [Done] Auto-doc agent skill: automatic document new changes
 - [Done] Implement nlm-proxy client integration
+- [Done] Remove legacy MICROSOFT_APP_ID settings

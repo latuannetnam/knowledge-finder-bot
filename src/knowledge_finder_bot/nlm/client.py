@@ -55,6 +55,7 @@ class NLMClient:
             "nlm_query_start",
             model=self._model,
             notebook_count=len(allowed_notebooks),
+            notebooks=allowed_notebooks,
             has_conversation_id=conversation_id is not None,
             stream=stream,
         )
@@ -86,6 +87,7 @@ class NLMClient:
             "nlm_stream_start",
             model=self._model,
             notebook_count=len(allowed_notebooks),
+            notebooks=allowed_notebooks,
             has_conversation_id=conversation_id is not None,
         )
 
