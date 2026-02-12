@@ -56,7 +56,7 @@ class NLMClient:
             model=self._model,
             notebook_count=len(allowed_notebooks),
             notebooks=allowed_notebooks,
-            has_conversation_id=conversation_id is not None,
+            conversation_id=conversation_id,
             stream=stream,
         )
 
@@ -88,7 +88,7 @@ class NLMClient:
             model=self._model,
             notebook_count=len(allowed_notebooks),
             notebooks=allowed_notebooks,
-            has_conversation_id=conversation_id is not None,
+            conversation_id=conversation_id,
         )
 
         stream = await self._client.chat.completions.create(
@@ -116,6 +116,12 @@ class NLMClient:
             )
 
             if (chunk_model and not model_emitted) or parsed_conv_id:
+                if parsed_conv_id:
+                    logger.info(
+                        "nlm_conversation_id_received",
+                        conversation_id=parsed_conv_id,
+                        system_fingerprint=sys_fp,
+                    )
                 logger.debug(
                     "nlm_chunk_meta_emit",
                     chunk_type="meta",

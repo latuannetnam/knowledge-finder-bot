@@ -1,8 +1,7 @@
 # Planning
 
-- [ ] Migrate all Claude skills to Antigravity
-- [ ] Check weather the MICROSOFT_APP_TENANT_ID variable is required for Graph API client or we need only CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID
 - [ ] Optimize bot conversation history management
+- [ ] Migrate all Claude skills to Antigravity
 
 # Done
 - [Done] Enhance logging system: support structured logging to file with rotation
@@ -17,3 +16,4 @@
 - [Done] Implement nlm-proxy client integration
 - [Done] Remove legacy MICROSOFT_APP_ID settings
 - [Done] Migrate all Claude memory to Antigravity
+- [Done] Check weather the MICROSOFT_APP_TENANT_ID variable is required for Graph API client or we need only CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID -> only keep MICROSOFT_APP_TENANT_ID as required for Graph API client
