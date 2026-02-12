@@ -7,7 +7,6 @@ from knowledge_finder_bot.auth.graph_client import UserInfo
 from knowledge_finder_bot.bot import create_agent_app
 from knowledge_finder_bot.config import Settings
 from knowledge_finder_bot.nlm.models import NLMChunk, NLMResponse
-from knowledge_finder_bot.nlm.session import SessionStore
 
 
 def create_mock_context(
@@ -37,13 +36,12 @@ def create_mock_context(
 
 
 def _make_default_chunks():
-    """Standard chunk sequence: meta(model) -> reasoning -> content -> meta(conv_id) -> meta(finish)."""
+    """Standard chunk sequence: meta(model) -> reasoning -> content -> meta(finish)."""
     return [
         NLMChunk(chunk_type="meta", model="hr-notebook"),
         NLMChunk(chunk_type="reasoning", text="Looking in HR docs"),
         NLMChunk(chunk_type="content", text="The leave policy "),
         NLMChunk(chunk_type="content", text="allows 20 days per year."),
-        NLMChunk(chunk_type="meta", conversation_id="conv-123"),
         NLMChunk(chunk_type="meta", finish_reason="stop"),
     ]
 
@@ -76,13 +74,7 @@ def mock_streaming_response():
 
 
 @pytest.fixture
-def session_store():
-    """Real SessionStore for testing multi-turn."""
-    return SessionStore(ttl=300, maxsize=100)
-
-
-@pytest.fixture
-def nlm_app(settings, acl_config_path, mock_graph_client, mock_nlm_client, session_store):
+def nlm_app(settings, acl_config_path, mock_graph_client, mock_nlm_client):
     """Agent app with ACL + nlm-proxy streaming integration."""
     from knowledge_finder_bot.acl.service import ACLService
 
@@ -92,7 +84,6 @@ def nlm_app(settings, acl_config_path, mock_graph_client, mock_nlm_client, sessi
         graph_client=mock_graph_client,
         acl_service=acl_service,
         nlm_client=mock_nlm_client,
-        session_store=session_store,
     )
 
 
@@ -246,7 +237,6 @@ async def test_streaming_no_reasoning_no_card(nlm_app, mock_nlm_client, mock_str
     async def _content_only_stream(**kwargs):
         yield NLMChunk(chunk_type="meta", model="hr-notebook")
         yield NLMChunk(chunk_type="content", text="Direct answer.")
-        yield NLMChunk(chunk_type="meta", conversation_id="conv-456")
         yield NLMChunk(chunk_type="meta", finish_reason="stop")
 
     mock_nlm_client.query_stream = MagicMock(
@@ -266,45 +256,6 @@ async def test_streaming_no_reasoning_no_card(nlm_app, mock_nlm_client, mock_str
         await nlm_app.on_turn(context)
 
     mock_streaming_response.set_attachments.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_streaming_conversation_id_stored(nlm_app, mock_nlm_client, session_store, mock_streaming_response):
-    """conversation_id from stream is stored in session for next turn."""
-    context = create_mock_context(
-        activity_type="message",
-        text="First question",
-        aad_object_id="test-aad-id",
-    )
-
-    with patch(
-        "knowledge_finder_bot.bot.bot.StreamingResponse",
-        return_value=mock_streaming_response,
-    ):
-        await nlm_app.on_turn(context)
-
-    assert session_store.get("test-aad-id") == "conv-123"
-
-
-@pytest.mark.asyncio
-async def test_streaming_conversation_id_reused(nlm_app, mock_nlm_client, session_store, mock_streaming_response):
-    """Stored conversation_id is passed to subsequent query_stream calls."""
-    session_store.set("test-aad-id", "existing-conv")
-
-    context = create_mock_context(
-        activity_type="message",
-        text="Follow-up question",
-        aad_object_id="test-aad-id",
-    )
-
-    with patch(
-        "knowledge_finder_bot.bot.bot.StreamingResponse",
-        return_value=mock_streaming_response,
-    ):
-        await nlm_app.on_turn(context)
-
-    call_kwargs = mock_nlm_client.query_stream.call_args.kwargs
-    assert call_kwargs["conversation_id"] == "existing-conv"
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from knowledge_finder_bot.nlm.client import NLMClient, _parse_conversation_id
+from knowledge_finder_bot.nlm.client import NLMClient
 from knowledge_finder_bot.nlm.models import NLMResponse
 
 
@@ -19,18 +19,6 @@ def nlm_settings(mock_env_vars):
         "NLM_PROXY_API_KEY": "test-key",
     }):
         return Settings()
-
-
-def test_parse_conversation_id_valid():
-    assert _parse_conversation_id("conv_abc123") == "abc123"
-
-
-def test_parse_conversation_id_none():
-    assert _parse_conversation_id(None) is None
-
-
-def test_parse_conversation_id_no_prefix():
-    assert _parse_conversation_id("no-prefix") is None
 
 
 @pytest.mark.asyncio
@@ -49,7 +37,7 @@ async def test_non_streaming_query_success(nlm_settings):
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
     mock_response.model = "knowledge-finder"
-    mock_response.system_fingerprint = "conv_xyz789"
+    mock_response.system_fingerprint = None
 
     client._client.chat.completions.create = AsyncMock(return_value=mock_response)
 
@@ -63,13 +51,12 @@ async def test_non_streaming_query_success(nlm_settings):
     assert result.answer == "The answer is 42."
     assert result.reasoning == "Used hr-notebook"
     assert result.model == "knowledge-finder"
-    assert result.conversation_id == "xyz789"
     assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
-async def test_non_streaming_passes_allowed_notebooks(nlm_settings):
-    """allowed_notebooks is passed in extra_body.metadata."""
+async def test_non_streaming_passes_metadata(nlm_settings):
+    """allowed_notebooks and chat_id passed in extra_body.metadata."""
     client = NLMClient(nlm_settings)
 
     mock_message = MagicMock()
@@ -90,13 +77,13 @@ async def test_non_streaming_passes_allowed_notebooks(nlm_settings):
     await client.query(
         user_message="Test",
         allowed_notebooks=["nb-1", "nb-2"],
-        conversation_id="existing-conv",
+        chat_id="user-aad-123",
         stream=False,
     )
 
     call_kwargs = client._client.chat.completions.create.call_args.kwargs
     assert call_kwargs["extra_body"]["metadata"]["allowed_notebooks"] == ["nb-1", "nb-2"]
-    assert call_kwargs["extra_body"]["conversation_id"] == "existing-conv"
+    assert call_kwargs["extra_body"]["metadata"]["chat_id"] == "user-aad-123"
 
 
 @pytest.mark.asyncio
@@ -125,7 +112,7 @@ async def test_streaming_query_success(nlm_settings):
         make_chunk(reasoning="Routing to ", model="knowledge-finder"),
         make_chunk(reasoning="hr-notebook"),
         make_chunk(content="The answer "),
-        make_chunk(content="is 42.", system_fingerprint="conv_stream123"),
+        make_chunk(content="is 42."),
         make_chunk(finish_reason="stop"),
     ]
 
@@ -145,7 +132,6 @@ async def test_streaming_query_success(nlm_settings):
 
     assert result.answer == "The answer is 42."
     assert result.reasoning == "Routing to hr-notebook"
-    assert result.conversation_id == "stream123"
     assert result.finish_reason == "stop"
 
 
@@ -163,32 +149,3 @@ async def test_query_error_reraises(nlm_settings):
             allowed_notebooks=["nb-1"],
             stream=False,
         )
-
-
-@pytest.mark.asyncio
-async def test_non_streaming_no_conversation_id(nlm_settings):
-    """Non-streaming response without system_fingerprint returns None conversation_id."""
-    client = NLMClient(nlm_settings)
-
-    mock_message = MagicMock()
-    mock_message.content = "Answer"
-    mock_message.reasoning_content = None
-
-    mock_choice = MagicMock()
-    mock_choice.message = mock_message
-    mock_choice.finish_reason = "stop"
-
-    mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
-    mock_response.model = "knowledge-finder"
-    mock_response.system_fingerprint = None
-
-    client._client.chat.completions.create = AsyncMock(return_value=mock_response)
-
-    result = await client.query(
-        user_message="Test",
-        allowed_notebooks=["nb-1"],
-        stream=False,
-    )
-
-    assert result.conversation_id is None

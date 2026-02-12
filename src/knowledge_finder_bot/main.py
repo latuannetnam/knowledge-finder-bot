@@ -140,14 +140,9 @@ def create_app() -> Application:
 
     # Initialize nlm-proxy client (optional — graceful fallback to echo mode)
     nlm_client = None
-    session_store = None
     if settings.nlm_proxy_url and settings.nlm_proxy_api_key:
         from knowledge_finder_bot.nlm import NLMClient
-        from knowledge_finder_bot.nlm.session import SessionStore
         nlm_client = NLMClient(settings)
-        session_store = SessionStore(
-            ttl=settings.nlm_session_ttl, maxsize=settings.nlm_session_maxsize
-        )
         logger.info("nlm_client_initialized", url=settings.nlm_proxy_url)
     else:
         logger.info("nlm_client_disabled", reason="NLM_PROXY_URL or NLM_PROXY_API_KEY not set")
@@ -158,7 +153,6 @@ def create_app() -> Application:
         acl_service=acl_service,
         mock_graph_client=mock_client,
         nlm_client=nlm_client,
-        session_store=session_store,
     )
 
     app = Application()

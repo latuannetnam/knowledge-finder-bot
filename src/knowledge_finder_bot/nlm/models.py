@@ -13,7 +13,7 @@ class NLMChunk:
     chunk_type: Literal["reasoning", "content", "meta"]
     text: str | None = None
     model: str | None = None
-    conversation_id: str | None = None
+
     finish_reason: str | None = None
 
 
@@ -23,5 +23,5 @@ class NLMResponse(BaseModel):
     answer: str
     reasoning: str | None = None
     model: str
-    conversation_id: str | None = None
+
     finish_reason: str | None = None

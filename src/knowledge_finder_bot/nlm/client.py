@@ -11,13 +11,6 @@ from knowledge_finder_bot.nlm.models import NLMChunk, NLMResponse
 logger = structlog.get_logger()
 
 
-def _parse_conversation_id(system_fingerprint: str | None) -> str | None:
-    """Extract conversation_id from system_fingerprint (format: conv_{id})."""
-    if system_fingerprint and system_fingerprint.startswith("conv_"):
-        return system_fingerprint[5:]
-    return None
-
-
 class NLMClient:
     """Async client for querying nlm-proxy."""
 
@@ -33,7 +26,7 @@ class NLMClient:
         self,
         user_message: str,
         allowed_notebooks: list[str],
-        conversation_id: str | None = None,
+        chat_id: str | None = None,
         stream: bool = True,
     ) -> NLMResponse:
         """Query nlm-proxy with ACL-filtered notebooks.
@@ -41,22 +34,25 @@ class NLMClient:
         Args:
             user_message: The user's question.
             allowed_notebooks: Notebook IDs the user has access to.
-            conversation_id: Optional ID for multi-turn context.
+            chat_id: Stable user identifier for session management in nlm-proxy.
             stream: Use streaming (default True).
 
         Returns:
-            NLMResponse with answer, reasoning, and conversation context.
+            NLMResponse with answer, reasoning, and model info.
         """
-        extra_body: dict = {"metadata": {"allowed_notebooks": allowed_notebooks}}
-        if conversation_id:
-            extra_body["conversation_id"] = conversation_id
+        extra_body: dict = {
+            "metadata": {
+                "allowed_notebooks": allowed_notebooks,
+                "chat_id": chat_id,
+            }
+        }
 
         logger.info(
             "nlm_query_start",
             model=self._model,
             notebook_count=len(allowed_notebooks),
             notebooks=allowed_notebooks,
-            conversation_id=conversation_id,
+            chat_id=chat_id,
             stream=stream,
         )
 
@@ -72,23 +68,26 @@ class NLMClient:
         self,
         user_message: str,
         allowed_notebooks: list[str],
-        conversation_id: str | None = None,
+        chat_id: str | None = None,
     ) -> AsyncGenerator[NLMChunk, None]:
         """Stream nlm-proxy response as individual chunks.
 
         Yields NLMChunk objects as they arrive from the SSE stream.
         The caller is responsible for accumulating text.
         """
-        extra_body: dict = {"metadata": {"allowed_notebooks": allowed_notebooks}}
-        if conversation_id:
-            extra_body["conversation_id"] = conversation_id
+        extra_body: dict = {
+            "metadata": {
+                "allowed_notebooks": allowed_notebooks,
+                "chat_id": chat_id,
+            }
+        }
 
         logger.info(
             "nlm_stream_start",
             model=self._model,
             notebook_count=len(allowed_notebooks),
             notebooks=allowed_notebooks,
-            conversation_id=conversation_id,
+            chat_id=chat_id,
         )
 
         stream = await self._client.chat.completions.create(
@@ -104,37 +103,25 @@ class NLMClient:
         async for chunk in stream:
             chunk_count += 1
             chunk_model = chunk.model if chunk.model else None
-            sys_fp = chunk.system_fingerprint
-            parsed_conv_id = _parse_conversation_id(sys_fp) if sys_fp else None
 
             logger.debug(
                 "nlm_chunk_received",
                 chunk_number=chunk_count,
                 has_model=chunk_model is not None,
-                has_system_fingerprint=sys_fp is not None,
                 num_choices=len(chunk.choices),
             )
 
-            if (chunk_model and not model_emitted) or parsed_conv_id:
-                if parsed_conv_id:
-                    logger.info(
-                        "nlm_conversation_id_received",
-                        conversation_id=parsed_conv_id,
-                        system_fingerprint=sys_fp,
-                    )
+            if chunk_model and not model_emitted:
                 logger.debug(
                     "nlm_chunk_meta_emit",
                     chunk_type="meta",
-                    model=chunk_model if not model_emitted else None,
-                    conversation_id=parsed_conv_id,
+                    model=chunk_model,
                 )
                 yield NLMChunk(
                     chunk_type="meta",
-                    model=chunk_model if not model_emitted else None,
-                    conversation_id=parsed_conv_id,
+                    model=chunk_model,
                 )
-                if chunk_model:
-                    model_emitted = True
+                model_emitted = True
 
             for choice in chunk.choices:
                 delta = choice.delta
@@ -182,7 +169,6 @@ class NLMClient:
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
         finish_reason = None
-        system_fingerprint = None
         model = self._model
 
         stream = await self._client.chat.completions.create(
@@ -195,8 +181,6 @@ class NLMClient:
         async for chunk in stream:
             if chunk.model:
                 model = chunk.model
-            if chunk.system_fingerprint:
-                system_fingerprint = chunk.system_fingerprint
 
             for choice in chunk.choices:
                 if choice.finish_reason:
@@ -211,14 +195,11 @@ class NLMClient:
                 if reasoning:
                     reasoning_parts.append(reasoning)
 
-        conversation_id = _parse_conversation_id(system_fingerprint)
-
         logger.info(
             "nlm_query_complete",
             model=model,
             answer_length=sum(len(p) for p in content_parts),
             has_reasoning=bool(reasoning_parts),
-            conversation_id=conversation_id,
             finish_reason=finish_reason,
         )
 
@@ -226,7 +207,6 @@ class NLMClient:
             answer="".join(content_parts),
             reasoning="".join(reasoning_parts) if reasoning_parts else None,
             model=model,
-            conversation_id=conversation_id,
             finish_reason=finish_reason,
         )
 
@@ -242,7 +222,6 @@ class NLMClient:
         )
 
         message = response.choices[0].message
-        conversation_id = _parse_conversation_id(response.system_fingerprint)
         reasoning = getattr(message, "reasoning_content", None)
 
         logger.info(
@@ -250,7 +229,6 @@ class NLMClient:
             model=response.model,
             answer_length=len(message.content or ""),
             has_reasoning=reasoning is not None,
-            conversation_id=conversation_id,
             finish_reason=response.choices[0].finish_reason,
         )
 
@@ -258,6 +236,5 @@ class NLMClient:
             answer=message.content or "",
             reasoning=reasoning,
             model=response.model,
-            conversation_id=conversation_id,
             finish_reason=response.choices[0].finish_reason,
         )

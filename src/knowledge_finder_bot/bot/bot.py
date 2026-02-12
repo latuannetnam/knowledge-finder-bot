@@ -32,7 +32,7 @@ from knowledge_finder_bot.nlm.formatter import (
     build_reasoning_card,
     build_source_citation,
 )
-from knowledge_finder_bot.nlm.session import SessionStore
+
 
 logger = structlog.get_logger()
 
@@ -55,7 +55,6 @@ def create_agent_app(
     acl_service: ACLService | None = None,
     mock_graph_client=None,
     nlm_client: NLMClient | None = None,
-    session_store: SessionStore | None = None,
 ) -> KnowledgeFinderAgentApplication:
     """Create and configure the agent application with ACL support.
 
@@ -65,7 +64,6 @@ def create_agent_app(
         acl_service: ACL service (None disables ACL entirely).
         mock_graph_client: Mock client for Agent Playground fake AAD IDs.
         nlm_client: nlm-proxy client (None falls back to echo mode).
-        session_store: Multi-turn session store.
     """
     load_dotenv()
 
@@ -245,15 +243,7 @@ def create_agent_app(
             channel_id=str(getattr(context.activity, "channel_id", None)),
         )
 
-        conversation_id = session_store.get(aad_object_id) if session_store else None
-        logger.info(
-            "session_lookup",
-            aad_object_id=aad_object_id,
-            conversation_id=conversation_id,
-            has_session_store=session_store is not None,
-        )
         notebook_id = None
-        new_conversation_id = None
         reasoning_text = ""
         reasoning_started = False
 
@@ -263,7 +253,7 @@ def create_agent_app(
                 async for chunk in nlm_client.query_stream(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
-                    conversation_id=conversation_id,
+                    chat_id=aad_object_id,
                 ):
                     if chunk.chunk_type == "meta":
                         if chunk.model and notebook_id is None:
@@ -273,8 +263,6 @@ def create_agent_app(
                                 streaming.queue_informative_update(
                                     f"Searching {nb_name}..."
                                 )
-                        if chunk.conversation_id:
-                            new_conversation_id = chunk.conversation_id
 
                     elif chunk.chunk_type == "reasoning":
                         reasoning_text += chunk.text or ""
@@ -309,13 +297,11 @@ def create_agent_app(
                 async for chunk in nlm_client.query_stream(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
-                    conversation_id=conversation_id,
+                    chat_id=aad_object_id,
                 ):
                     if chunk.chunk_type == "meta":
                         if chunk.model and notebook_id is None:
                             notebook_id = chunk.model
-                        if chunk.conversation_id:
-                            new_conversation_id = chunk.conversation_id
 
                     elif chunk.chunk_type == "reasoning":
                         reasoning_text += chunk.text or ""
@@ -340,25 +326,10 @@ def create_agent_app(
                 )
                 await context.send_activity(response_activity)
 
-            if new_conversation_id and session_store:
-                session_store.set(aad_object_id, new_conversation_id)
-                logger.info(
-                    "session_saved",
-                    aad_object_id=aad_object_id,
-                    conversation_id=new_conversation_id,
-                )
-            elif not new_conversation_id:
-                logger.warning(
-                    "session_not_saved",
-                    aad_object_id=aad_object_id,
-                    reason="nlm-proxy returned no conversation_id",
-                )
-
             logger.info(
                 "nlm_query_delivered",
                 notebook_id=notebook_id,
-                sent_conversation_id=conversation_id,
-                received_conversation_id=new_conversation_id,
+                chat_id=aad_object_id,
                 use_streaming=use_streaming,
             )
 

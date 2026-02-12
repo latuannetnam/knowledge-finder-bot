@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Code Patterns & Conventions
 
 ## 📝 Documentation as Code
@@ -76,6 +80,7 @@ class NotebookLMBot(ActivityHandler):
 ```
 
 ## Testing Pattern
+**Always** use uv to run test
 
 Use pytest-asyncio with fixtures:
 

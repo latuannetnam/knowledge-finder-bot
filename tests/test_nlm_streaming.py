@@ -18,10 +18,9 @@ def test_nlm_chunk_content():
 
 def test_nlm_chunk_meta():
     """NLMChunk holds meta chunk data."""
-    chunk = NLMChunk(chunk_type="meta", model="hr-notebook", conversation_id="abc")
+    chunk = NLMChunk(chunk_type="meta", model="hr-notebook")
     assert chunk.chunk_type == "meta"
     assert chunk.model == "hr-notebook"
-    assert chunk.conversation_id == "abc"
     assert chunk.text is None
 
 
@@ -146,30 +145,6 @@ async def test_query_stream_yields_model_meta(nlm_settings):
     assert model_metas[0].model == "hr-notebook"
 
 
-@pytest.mark.asyncio
-async def test_query_stream_yields_conversation_id(nlm_settings):
-    """system_fingerprint='conv_xxx' yields meta chunk with conversation_id."""
-    client = NLMClient(nlm_settings)
-
-    chunks = [
-        make_chunk(content="Hi", model="kf", system_fingerprint="conv_abc123"),
-        make_chunk(finish_reason="stop"),
-    ]
-
-    async def mock_stream():
-        for c in chunks:
-            yield c
-
-    client._client.chat.completions.create = AsyncMock(return_value=mock_stream())
-
-    result = await _collect_chunks(client.query_stream(
-        user_message="Test",
-        allowed_notebooks=["nb-1"],
-    ))
-
-    conv_metas = [c for c in result if c.chunk_type == "meta" and c.conversation_id is not None]
-    assert len(conv_metas) >= 1
-    assert conv_metas[0].conversation_id == "abc123"
 
 
 @pytest.mark.asyncio
@@ -216,7 +191,7 @@ async def test_query_stream_propagates_error(nlm_settings):
 
 @pytest.mark.asyncio
 async def test_query_stream_passes_metadata(nlm_settings):
-    """allowed_notebooks and conversation_id passed in extra_body."""
+    """allowed_notebooks and chat_id passed in extra_body.metadata."""
     client = NLMClient(nlm_settings)
 
     async def mock_stream():
@@ -227,11 +202,11 @@ async def test_query_stream_passes_metadata(nlm_settings):
     async for _ in client.query_stream(
         user_message="Test",
         allowed_notebooks=["nb-1", "nb-2"],
-        conversation_id="existing-conv",
+        chat_id="user-aad-123",
     ):
         pass
 
     call_kwargs = client._client.chat.completions.create.call_args.kwargs
     assert call_kwargs["extra_body"]["metadata"]["allowed_notebooks"] == ["nb-1", "nb-2"]
-    assert call_kwargs["extra_body"]["conversation_id"] == "existing-conv"
+    assert call_kwargs["extra_body"]["metadata"]["chat_id"] == "user-aad-123"
     assert call_kwargs["stream"] is True
