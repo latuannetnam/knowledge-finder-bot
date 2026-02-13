@@ -357,6 +357,7 @@ def create_agent_app(
                         CardAction,
                     )
                     suggested = SuggestedActions(
+                        to=[context.activity.from_property.id],
                         actions=[
                             CardAction(
                                 type="imBack",
