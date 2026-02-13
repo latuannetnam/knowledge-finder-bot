@@ -45,14 +45,19 @@ graph TD
 - Ensures users can only query notebooks they are authorized to access.
 
 ### 4. nlm-proxy Integration (`src/knowledge_finder_bot/nlm/`)
-- **NLMClient**: Wraps the OpenAI Python SDK (`AsyncOpenAI`) to communicate with nlm-proxy
-  - Streaming responses with SSE chunk buffering
-  - Non-streaming fallback support
-  - Conversation ID extraction from `system_fingerprint` (format: `conv_{id}`)
+- **NLMClient**: Uses Langchain `ChatOpenAI` to communicate with nlm-proxy
+  - Streaming responses with SSE chunk buffering via `astream()`
+  - Non-streaming fallback via `ainvoke()`
   - Per-request ACL via `extra_body.metadata.allowed_notebooks`
-- **SessionStore**: Multi-turn conversation management
-  - TTLCache with 24-hour expiry (default)
-  - Maps Azure AD Object ID → conversation ID
+- **ConversationMemoryManager**: Per-session conversation history
+  - TTLCache with configurable TTL (default: 1 hour) and maxsize (default: 1000)
+  - Stores Q&A exchanges for multi-turn context
+- **Question Rewriting**: Automatic follow-up disambiguation
+  - Rewrites follow-up questions as standalone using conversation history
+  - Uses nlm-proxy's `llm_task` route (triggered by `### Task:` prefix)
+- **Follow-up Suggestions**: Post-answer question generation
+  - Generates 2-3 suggested follow-up questions
+  - Displayed as SuggestedActions in Teams
 - **Response Formatter**: Source attribution in responses
   - Extracts notebook info from `reasoning_content`
   - Adds markdown-formatted source citations
@@ -79,7 +84,8 @@ graph TD
   - Microsoft-native tunneling solution for Azure Bot Service development
   - Persistent subdomain eliminates need to update bot configuration
 
-- **nlm-proxy Client: OpenAI SDK**
-  - Uses `AsyncOpenAI` for OpenAI-compatible API (nlm-proxy)
+- **nlm-proxy Client: Langchain + ChatOpenAI**
+  - Uses `langchain-openai` `ChatOpenAI` for OpenAI-compatible API (nlm-proxy)
   - Supports both streaming (default) and non-streaming modes
-  - Custom `extra_body` parameter for per-request metadata (ACL)
+  - Conversation memory via `langchain-core` message types
+  - LLM-powered question rewriting and follow-up generation via `### Task:` routing

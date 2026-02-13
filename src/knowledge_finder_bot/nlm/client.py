@@ -1,32 +1,64 @@
 """Client for nlm-proxy OpenAI-compatible API."""
 
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 import structlog
-from openai import AsyncOpenAI
+from langchain_core.messages import AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 
 from knowledge_finder_bot.config import Settings
 from knowledge_finder_bot.nlm.models import NLMChunk, NLMResponse
+
+if TYPE_CHECKING:
+    from knowledge_finder_bot.nlm.memory import ConversationMemoryManager
 
 logger = structlog.get_logger()
 
 
 class NLMClient:
-    """Async client for querying nlm-proxy."""
+    """Async client for querying nlm-proxy via Langchain ChatOpenAI."""
 
-    def __init__(self, settings: Settings) -> None:
-        self._client = AsyncOpenAI(
+    def __init__(
+        self,
+        settings: Settings,
+        memory: ConversationMemoryManager | None = None,
+        enable_rewrite: bool = True,
+        enable_followup: bool = False,
+    ) -> None:
+        self._llm = ChatOpenAI(
             base_url=settings.nlm_proxy_url,
             api_key=settings.nlm_proxy_api_key,
+            model=settings.nlm_model_name,
             timeout=settings.nlm_timeout,
+            streaming=True,
         )
         self._model = settings.nlm_model_name
+        self._memory = memory
+        self._enable_rewrite = enable_rewrite
+        self._enable_followup = enable_followup
+
+    def _build_extra_body(
+        self,
+        allowed_notebooks: list[str],
+        chat_id: str | None = None,
+    ) -> dict:
+        """Build the extra_body metadata dict for nlm-proxy."""
+        return {
+            "metadata": {
+                "allowed_notebooks": allowed_notebooks,
+                "chat_id": chat_id,
+            }
+        }
 
     async def query(
         self,
         user_message: str,
         allowed_notebooks: list[str],
         chat_id: str | None = None,
+        session_id: str | None = None,
         stream: bool = True,
     ) -> NLMResponse:
         """Query nlm-proxy with ACL-filtered notebooks.
@@ -35,17 +67,13 @@ class NLMClient:
             user_message: The user's question.
             allowed_notebooks: Notebook IDs the user has access to.
             chat_id: Stable user identifier for session management in nlm-proxy.
+            session_id: Session identifier for conversation memory.
             stream: Use streaming (default True).
 
         Returns:
             NLMResponse with answer, reasoning, and model info.
         """
-        extra_body: dict = {
-            "metadata": {
-                "allowed_notebooks": allowed_notebooks,
-                "chat_id": chat_id,
-            }
-        }
+        extra_body = self._build_extra_body(allowed_notebooks, chat_id)
 
         logger.info(
             "nlm_query_start",
@@ -53,34 +81,107 @@ class NLMClient:
             notebook_count=len(allowed_notebooks),
             notebooks=allowed_notebooks,
             chat_id=chat_id,
+            session_id=session_id,
             stream=stream,
         )
 
         try:
+            # Rewrite question if memory has history
+            rewritten_question = None
+            actual_message = user_message
+            if (
+                self._enable_rewrite
+                and self._memory
+                and session_id
+                and self._memory.get_messages(session_id)
+            ):
+                rewritten = await self._rewrite_question(
+                    user_message, session_id, extra_body
+                )
+                if rewritten and rewritten != user_message:
+                    rewritten_question = rewritten
+                    actual_message = rewritten
+                    logger.info(
+                        "nlm_question_rewritten",
+                        original=user_message[:100],
+                        rewritten=rewritten[:100],
+                    )
+
             if stream:
-                return await self._query_streaming(user_message, extra_body)
-            return await self._query_non_streaming(user_message, extra_body)
+                result = await self._query_streaming(actual_message, extra_body)
+            else:
+                result = await self._query_non_streaming(actual_message, extra_body)
+
+            result.rewritten_question = rewritten_question
+
+            # Generate follow-up questions
+            if self._enable_followup:
+                followups = await self._generate_followups(
+                    user_message, result.answer, extra_body
+                )
+                if followups:
+                    result.follow_up_questions = followups
+
+            # Store exchange in memory for future context
+            if self._memory and session_id:
+                self._memory.add_exchange(session_id, user_message, result.answer)
+
+            return result
         except Exception:
             logger.error("nlm_query_error", model=self._model)
             raise
+
+    async def generate_followups(
+        self,
+        question: str,
+        answer: str,
+        allowed_notebooks: list[str],
+        chat_id: str | None = None,
+    ) -> list[str] | None:
+        """Generate follow-up question suggestions.
+
+        Public convenience method for use after streaming queries,
+        where follow-ups can't be generated inline.
+
+        Returns a list of follow-up questions, or None if disabled/failed.
+        """
+        if not self._enable_followup:
+            return None
+        extra_body = self._build_extra_body(allowed_notebooks, chat_id)
+        return await self._generate_followups(question, answer, extra_body)
 
     async def query_stream(
         self,
         user_message: str,
         allowed_notebooks: list[str],
         chat_id: str | None = None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[NLMChunk, None]:
         """Stream nlm-proxy response as individual chunks.
 
         Yields NLMChunk objects as they arrive from the SSE stream.
         The caller is responsible for accumulating text.
         """
-        extra_body: dict = {
-            "metadata": {
-                "allowed_notebooks": allowed_notebooks,
-                "chat_id": chat_id,
-            }
-        }
+        extra_body = self._build_extra_body(allowed_notebooks, chat_id)
+
+        # Rewrite question if memory has history
+        actual_message = user_message
+        if (
+            self._enable_rewrite
+            and self._memory
+            and session_id
+            and self._memory.get_messages(session_id)
+        ):
+            rewritten = await self._rewrite_question(
+                user_message, session_id, extra_body
+            )
+            if rewritten and rewritten != user_message:
+                actual_message = rewritten
+                logger.info(
+                    "nlm_question_rewritten",
+                    original=user_message[:100],
+                    rewritten=rewritten[:100],
+                )
 
         logger.info(
             "nlm_stream_start",
@@ -90,25 +191,26 @@ class NLMClient:
             chat_id=chat_id,
         )
 
-        stream = await self._client.chat.completions.create(
-            model=self._model,
-            messages=[{"role": "user", "content": user_message}],
-            stream=True,
-            extra_body=extra_body,
-        )
-
         model_emitted = False
         chunk_count = 0
+        content_parts: list[str] = []
 
-        async for chunk in stream:
+        async for chunk in self._llm.astream(
+            [HumanMessage(content=actual_message)],
+            extra_body=extra_body,
+        ):
             chunk_count += 1
-            chunk_model = chunk.model if chunk.model else None
+
+            # Extract model from response_metadata (available on first chunk)
+            chunk_model = chunk.response_metadata.get("model_name") if chunk.response_metadata else None
+            # Fallback: check additional_kwargs for model info
+            if not chunk_model:
+                chunk_model = (chunk.additional_kwargs or {}).get("model")
 
             logger.debug(
                 "nlm_chunk_received",
                 chunk_number=chunk_count,
                 has_model=chunk_model is not None,
-                num_choices=len(chunk.choices),
             )
 
             if chunk_model and not model_emitted:
@@ -123,44 +225,146 @@ class NLMClient:
                 )
                 model_emitted = True
 
-            for choice in chunk.choices:
-                delta = choice.delta
+            # Check for reasoning_content in additional_kwargs
+            reasoning = (chunk.additional_kwargs or {}).get("reasoning_content")
+            if reasoning:
+                logger.debug(
+                    "nlm_chunk_reasoning_emit",
+                    chunk_type="reasoning",
+                    text_length=len(reasoning),
+                    text_preview=reasoning[:50] if len(reasoning) > 50 else reasoning,
+                )
+                yield NLMChunk(chunk_type="reasoning", text=reasoning)
 
-                reasoning = getattr(delta, "reasoning_content", None)
-                if reasoning:
-                    logger.debug(
-                        "nlm_chunk_reasoning_emit",
-                        chunk_type="reasoning",
-                        text_length=len(reasoning),
-                        text_preview=reasoning[:50] if len(reasoning) > 50 else reasoning,
-                    )
-                    yield NLMChunk(chunk_type="reasoning", text=reasoning)
+            if chunk.content:
+                content_parts.append(chunk.content)
+                logger.debug(
+                    "nlm_chunk_content_emit",
+                    chunk_type="content",
+                    text_length=len(chunk.content),
+                    text_preview=chunk.content[:50] if len(chunk.content) > 50 else chunk.content,
+                )
+                yield NLMChunk(chunk_type="content", text=chunk.content)
 
-                if delta.content:
-                    logger.debug(
-                        "nlm_chunk_content_emit",
-                        chunk_type="content",
-                        text_length=len(delta.content),
-                        text_preview=delta.content[:50] if len(delta.content) > 50 else delta.content,
-                    )
-                    yield NLMChunk(chunk_type="content", text=delta.content)
+            # Check for finish_reason in response_metadata
+            finish_reason = (chunk.response_metadata or {}).get("finish_reason")
+            if finish_reason:
+                logger.debug(
+                    "nlm_chunk_finish_emit",
+                    chunk_type="meta",
+                    finish_reason=finish_reason,
+                )
+                yield NLMChunk(
+                    chunk_type="meta",
+                    finish_reason=finish_reason,
+                )
 
-                if choice.finish_reason:
-                    logger.debug(
-                        "nlm_chunk_finish_emit",
-                        chunk_type="meta",
-                        finish_reason=choice.finish_reason,
-                    )
-                    yield NLMChunk(
-                        chunk_type="meta",
-                        finish_reason=choice.finish_reason,
-                    )
+        # Store exchange in memory after streaming completes
+        if self._memory and session_id:
+            answer = "".join(content_parts)
+            self._memory.add_exchange(session_id, user_message, answer)
 
         logger.info(
             "nlm_stream_complete",
             model=self._model,
             total_chunks_received=chunk_count,
         )
+
+    async def _rewrite_question(
+        self,
+        question: str,
+        session_id: str,
+        extra_body: dict,
+    ) -> str | None:
+        """Rewrite a follow-up question as standalone using nlm-proxy's llm_task.
+
+        Sends conversation history + rewrite instruction with ### Task: prefix
+        to trigger llm_task classification in nlm-proxy's SmartRouter.
+        """
+        from knowledge_finder_bot.nlm.prompts import (
+            REWRITE_SYSTEM_PROMPT,
+            REWRITE_USER_TEMPLATE,
+        )
+
+        history = self._memory.get_messages(session_id) if self._memory else []
+        if not history:
+            return None
+
+        messages: list[BaseMessage] = [
+            SystemMessage(content=REWRITE_SYSTEM_PROMPT),
+            *history,
+            HumanMessage(content=REWRITE_USER_TEMPLATE.format(question=question)),
+        ]
+
+        logger.debug(
+            "nlm_rewrite_start",
+            question=question[:100],
+            history_length=len(history),
+        )
+
+        try:
+            response = await self._llm.ainvoke(messages, extra_body=extra_body)
+            rewritten = (response.content or "").strip()
+            logger.debug(
+                "nlm_rewrite_complete",
+                rewritten=rewritten[:100],
+            )
+            return rewritten if rewritten else None
+        except Exception:
+            logger.warning("nlm_rewrite_failed", question=question[:100])
+            return None
+
+    async def _generate_followups(
+        self,
+        question: str,
+        answer: str,
+        extra_body: dict,
+    ) -> list[str] | None:
+        """Generate follow-up question suggestions via nlm-proxy's llm_task.
+
+        Returns a list of 2-3 follow-up questions, or None on failure.
+        """
+        from knowledge_finder_bot.nlm.prompts import (
+            FOLLOWUP_SYSTEM_PROMPT,
+            FOLLOWUP_USER_TEMPLATE,
+        )
+
+        messages: list[BaseMessage] = [
+            SystemMessage(content=FOLLOWUP_SYSTEM_PROMPT),
+            HumanMessage(
+                content=FOLLOWUP_USER_TEMPLATE.format(
+                    question=question, answer=answer[:500]
+                )
+            ),
+        ]
+
+        logger.debug("nlm_followup_start", question=question[:100])
+
+        try:
+            response = await self._llm.ainvoke(messages, extra_body=extra_body)
+            raw = (response.content or "").strip()
+            if not raw:
+                return None
+
+            # Parse one question per line, strip numbering/bullets
+            followups = []
+            for line in raw.split("\n"):
+                line = line.strip()
+                # Remove common numbering patterns: "1." "1)" "-" "•"
+                if line and line[0].isdigit():
+                    line = line.lstrip("0123456789.)").strip()
+                line = line.lstrip("-•").strip()
+                if line and line.endswith("?"):
+                    followups.append(line)
+
+            logger.debug(
+                "nlm_followup_complete",
+                count=len(followups),
+            )
+            return followups if followups else None
+        except Exception:
+            logger.warning("nlm_followup_failed", question=question[:100])
+            return None
 
     async def _query_streaming(
         self, user_message: str, extra_body: dict
@@ -171,29 +375,29 @@ class NLMClient:
         finish_reason = None
         model = self._model
 
-        stream = await self._client.chat.completions.create(
-            model=self._model,
-            messages=[{"role": "user", "content": user_message}],
-            stream=True,
+        async for chunk in self._llm.astream(
+            [HumanMessage(content=user_message)],
             extra_body=extra_body,
-        )
+        ):
+            # Extract model from response_metadata
+            chunk_model = (chunk.response_metadata or {}).get("model_name")
+            if not chunk_model:
+                chunk_model = (chunk.additional_kwargs or {}).get("model")
+            if chunk_model:
+                model = chunk_model
 
-        async for chunk in stream:
-            if chunk.model:
-                model = chunk.model
+            if chunk.content:
+                content_parts.append(chunk.content)
 
-            for choice in chunk.choices:
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
+            # reasoning_content in additional_kwargs (OpenAI o1/o3 format)
+            reasoning = (chunk.additional_kwargs or {}).get("reasoning_content")
+            if reasoning:
+                reasoning_parts.append(reasoning)
 
-                delta = choice.delta
-                if delta.content:
-                    content_parts.append(delta.content)
-
-                # reasoning_content is in OpenAI o1/o3 format
-                reasoning = getattr(delta, "reasoning_content", None)
-                if reasoning:
-                    reasoning_parts.append(reasoning)
+            # finish_reason in response_metadata
+            fr = (chunk.response_metadata or {}).get("finish_reason")
+            if fr:
+                finish_reason = fr
 
         logger.info(
             "nlm_query_complete",
@@ -214,27 +418,26 @@ class NLMClient:
         self, user_message: str, extra_body: dict
     ) -> NLMResponse:
         """Execute non-streaming query."""
-        response = await self._client.chat.completions.create(
-            model=self._model,
-            messages=[{"role": "user", "content": user_message}],
-            stream=False,
+        response = await self._llm.ainvoke(
+            [HumanMessage(content=user_message)],
             extra_body=extra_body,
         )
 
-        message = response.choices[0].message
-        reasoning = getattr(message, "reasoning_content", None)
+        reasoning = (response.additional_kwargs or {}).get("reasoning_content")
+        finish_reason = (response.response_metadata or {}).get("finish_reason")
+        model = (response.response_metadata or {}).get("model_name", self._model)
 
         logger.info(
             "nlm_query_complete",
-            model=response.model,
-            answer_length=len(message.content or ""),
+            model=model,
+            answer_length=len(response.content or ""),
             has_reasoning=reasoning is not None,
-            finish_reason=response.choices[0].finish_reason,
+            finish_reason=finish_reason,
         )
 
         return NLMResponse(
-            answer=message.content or "",
+            answer=response.content or "",
             reasoning=reasoning,
-            model=response.model,
-            finish_reason=response.choices[0].finish_reason,
+            model=model,
+            finish_reason=finish_reason,
         )

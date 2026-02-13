@@ -254,6 +254,7 @@ def create_agent_app(
         notebook_id = None
         reasoning_text = ""
         reasoning_started = False
+        answer_text = ""
 
         try:
             if use_streaming:
@@ -262,6 +263,7 @@ def create_agent_app(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
                     chat_id=aad_object_id,
+                    session_id=aad_object_id,
                 ):
                     if chunk.chunk_type == "meta":
                         if chunk.model and notebook_id is None:
@@ -283,6 +285,7 @@ def create_agent_app(
                     elif chunk.chunk_type == "content":
                         if chunk.text:
                             streaming.queue_text_chunk(chunk.text)
+                            answer_text += chunk.text
 
                 # Attach reasoning as collapsible Adaptive Card
                 if reasoning_text:
@@ -300,12 +303,11 @@ def create_agent_app(
             else:
                 # Non-streaming channel (emulator, webchat) — buffer + send_activity
                 await context.send_activity(Activity(type="typing"))
-
-                answer_text = ""
                 async for chunk in nlm_client.query_stream(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
                     chat_id=aad_object_id,
+                    session_id=aad_object_id,
                 ):
                     if chunk.chunk_type == "meta":
                         if chunk.model and notebook_id is None:
@@ -330,7 +332,7 @@ def create_agent_app(
                 response_activity = Activity(
                     type="message",
                     text=answer_text,
-                    attachments=attachments if attachments else None,
+                    attachments=attachments,
                 )
                 await context.send_activity(response_activity)
 
@@ -340,6 +342,39 @@ def create_agent_app(
                 chat_id=aad_object_id,
                 use_streaming=use_streaming,
             )
+
+            # Generate and send follow-up suggestions (fire-and-forget)
+            try:
+                followups = await nlm_client.generate_followups(
+                    question=user_message,
+                    answer=answer_text,
+                    allowed_notebooks=list(allowed_notebooks),
+                    chat_id=aad_object_id,
+                )
+                if followups:
+                    from microsoft_agents.activity import (
+                        SuggestedActions,
+                        CardAction,
+                    )
+                    suggested = SuggestedActions(
+                        actions=[
+                            CardAction(
+                                type="imBack",
+                                title=q,
+                                value=q,
+                            )
+                            for q in followups[:3]
+                        ]
+                    )
+                    followup_activity = Activity(
+                        type="message",
+                        text="💡 **You might also want to ask:**",
+                        suggested_actions=suggested,
+                    )
+                    await context.send_activity(followup_activity)
+                    logger.info("nlm_followups_sent", count=len(followups))
+            except Exception as e:
+                logger.warning("nlm_followup_failed", error=str(e))
 
         except Exception as e:
             logger.error("nlm_query_failed", error=str(e), use_streaming=use_streaming)

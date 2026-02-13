@@ -25,3 +25,5 @@ class NLMResponse(BaseModel):
     model: str
 
     finish_reason: str | None = None
+    rewritten_question: str | None = None
+    follow_up_questions: list[str] | None = None

@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     nlm_proxy_api_key: str = Field("", alias="NLM_PROXY_API_KEY")
     nlm_model_name: str = Field("knowledge-finder", alias="NLM_MODEL_NAME")
     nlm_timeout: float = Field(60.0, alias="NLM_TIMEOUT")
+    nlm_memory_ttl: int = Field(3600, alias="NLM_MEMORY_TTL")
+    nlm_memory_maxsize: int = Field(1000, alias="NLM_MEMORY_MAXSIZE")
+    nlm_enable_rewrite: bool = Field(True, alias="NLM_ENABLE_REWRITE")
+    nlm_enable_followup: bool = Field(True, alias="NLM_ENABLE_FOLLOWUP")
 
     # Server
     host: str = Field("0.0.0.0", alias="HOST")

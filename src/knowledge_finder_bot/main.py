@@ -142,7 +142,17 @@ def create_app() -> Application:
     nlm_client = None
     if settings.nlm_proxy_url and settings.nlm_proxy_api_key:
         from knowledge_finder_bot.nlm import NLMClient
-        nlm_client = NLMClient(settings)
+        from knowledge_finder_bot.nlm.memory import ConversationMemoryManager
+        memory = ConversationMemoryManager(
+            ttl=settings.nlm_memory_ttl,
+            maxsize=settings.nlm_memory_maxsize,
+        )
+        nlm_client = NLMClient(
+            settings,
+            memory=memory,
+            enable_rewrite=settings.nlm_enable_rewrite,
+            enable_followup=settings.nlm_enable_followup,
+        )
         logger.info("nlm_client_initialized", url=settings.nlm_proxy_url)
     else:
         logger.info("nlm_client_disabled", reason="NLM_PROXY_URL or NLM_PROXY_API_KEY not set")
