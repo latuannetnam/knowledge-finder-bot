@@ -1,6 +1,7 @@
 # Planning
-
+- [ ] Refactor to langchain for complext multi-turn conversation
 - [ ] Optimize bot conversation history management: request rewrite with conversation history, conversation memory etc.
+- [ ] Generate follow-up questions based on nlm-proxy response
 - [ ] Migrate all Claude skills to Antigravity
 
 # Done
