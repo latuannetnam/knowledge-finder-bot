@@ -210,6 +210,7 @@ uv run pytest tests/test_nlm_client.py -v
 - **[CLAUDE.md](./CLAUDE.md)** - Guidance for Claude Code (architecture, patterns, commands)
 - **[Setup Guide](./docs/setup.md)** - Installation and local development
 - **[Architecture](./docs/architecture.md)** - System design and components
+- **[Deployment Guide](./docs/deployment.md)** - Production hosting instructions
 - **[ACL Implementation Plan](./docs/plans/2025-02-10-acl-mechanism.md)** - Step-by-step ACL guide
 
 ## 🚦 Project Status
