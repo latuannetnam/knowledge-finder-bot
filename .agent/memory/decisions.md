@@ -320,6 +320,30 @@ AFTER:  User → StreamingResponse(context)
 
 ---
 
+### ADR-014: Defer LangGraph Agent Migration
+
+**Date:** 2025-02-14
+
+**Decision:** Keep the current hybrid architecture (AsyncOpenAI + ChatOpenAI) and do NOT migrate to LangGraph agent orchestration at this time.
+
+**Rationale:**
+- Bot workflow is linear (ACL → rewrite → query → followup → respond) — LangGraph's graph-based orchestration is over-engineering for this flow
+- `reasoning_content` from nlm-proxy SSE deltas is still not supported by `ChatOpenAI` (even v1.1.9) — ADR-012 hybrid approach would still be required
+- M365 SDK `StreamingResponse` integration (`queue_text_chunk()`) is tightly coupled and incompatible with LangGraph's streaming model
+- 90+ tests passing — migration would require significant test rewrite for minimal functional gain
+- Already on latest packages: `langchain-openai==1.1.9`, `langchain-core==1.2.12`
+
+**Migration triggers (re-evaluate when any arise):**
+- Multi-backend routing (query multiple LLMs/services per request)
+- Multi-step reasoning with tool use / web search / code execution
+- Human-in-the-loop approval workflows
+- LangChain fixes `reasoning_content` in Chat Completions SSE (can then drop `AsyncOpenAI`)
+- LangGraph 2.0 release (expected Q2 2026) with better API stability
+
+**Full analysis:** [langchain_langgraph_analysis.md](file:///d:/latuan/Programming/AIAgent/knowledge-finder-bot/docs/langchain_langgraph_analysis.md)
+
+---
+
 ## Template for New Decisions
 
 ```markdown
