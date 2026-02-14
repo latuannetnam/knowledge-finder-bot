@@ -150,6 +150,17 @@ class NLMClient:
         extra_body = self._build_extra_body(allowed_notebooks, chat_id)
         return await self._generate_followups(question, answer, extra_body)
 
+    def clear_session(self, session_id: str) -> bool:
+        """Clear conversation memory for a session.
+
+        Returns True if memory was cleared, False if no memory existed.
+        """
+        if self._memory:
+            had_history = bool(self._memory.get_messages(session_id))
+            self._memory.clear(session_id)
+            return had_history
+        return False
+
     async def query_stream(
         self,
         user_message: str,

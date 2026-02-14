@@ -233,6 +233,21 @@ def create_agent_app(
             )
             return
 
+        # --- Bot commands ---
+        if user_message.strip().lower() == "/clear":
+            conversation_id = context.activity.conversation.id
+            nlm_client.clear_session(conversation_id)
+            logger.info(
+                "conversation_cleared",
+                conversation_id=conversation_id,
+                user_name=user_name,
+            )
+            await context.send_activity(
+                "🗑️ Conversation memory cleared. "
+                "I'll treat your next message as a fresh conversation."
+            )
+            return
+
         # --- nlm-proxy query ---
         streaming = StreamingResponse(context)
         streaming.set_generated_by_ai_label(True)

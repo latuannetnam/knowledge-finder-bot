@@ -34,14 +34,16 @@ class ConversationMemoryManager:
     or when `maxsize` is exceeded (LRU eviction).
     """
 
-    def __init__(self, ttl: int = 3600, maxsize: int = 1000) -> None:
+    def __init__(self, ttl: int = 3600, maxsize: int = 1000, max_messages: int = 0) -> None:
         self._cache: TTLCache[str, InMemoryChatHistory] = TTLCache(
             maxsize=maxsize, ttl=ttl
         )
+        self._max_messages = max_messages  # 0 = unlimited
         logger.info(
             "memory_manager_initialized",
             ttl=ttl,
             maxsize=maxsize,
+            max_messages=max_messages,
         )
 
     def get_history(self, session_id: str) -> InMemoryChatHistory:
@@ -58,6 +60,14 @@ class ConversationMemoryManager:
         history = self.get_history(session_id)
         history.add_message(HumanMessage(content=question))
         history.add_message(AIMessage(content=answer))
+        # Trim to max messages (sliding window)
+        if self._max_messages > 0 and len(history.messages) > self._max_messages:
+            history._messages = history._messages[-self._max_messages:]
+            logger.debug(
+                "memory_trimmed",
+                session_id=session_id,
+                kept=self._max_messages,
+            )
         logger.debug(
             "memory_exchange_added",
             session_id=session_id,

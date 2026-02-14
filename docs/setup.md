@@ -68,6 +68,7 @@ NLM_MODEL_NAME=knowledge-finder      # Model name for nlm-proxy
 NLM_TIMEOUT=60                        # Request timeout (seconds)
 NLM_MEMORY_TTL=3600                   # Conversation memory TTL (seconds)
 NLM_MEMORY_MAXSIZE=1000               # Max concurrent sessions
+NLM_MEMORY_MAX_MESSAGES=10             # Max messages per session (0=unlimited)
 NLM_ENABLE_REWRITE=true               # Auto-rewrite follow-up questions
 NLM_ENABLE_FOLLOWUP=false             # Generate follow-up suggestions
 ```

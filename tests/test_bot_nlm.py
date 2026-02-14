@@ -435,3 +435,56 @@ async def test_fallback_to_echo_when_nlm_client_none(settings, acl_config_path, 
         for c in calls
     )
     assert echo_found, f"Echo fallback not found in: {calls}"
+
+
+@pytest.mark.asyncio
+async def test_clear_command_clears_memory(nlm_app, mock_nlm_client, mock_streaming_response):
+    """/clear command triggers clear_session and sends confirmation."""
+    mock_nlm_client.clear_session = MagicMock(return_value=True)
+
+    context = create_mock_context(
+        activity_type="message",
+        text="/clear",
+        aad_object_id="test-aad-id",
+    )
+    context.activity.conversation.id = "conv-to-clear"
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    # clear_session should be called with conversation.id
+    mock_nlm_client.clear_session.assert_called_once_with("conv-to-clear")
+
+    # Should NOT call query_stream
+    mock_nlm_client.query_stream.assert_not_called()
+
+    # Should send confirmation message
+    send_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if isinstance(call[0][0], str)
+    ]
+    assert any("memory cleared" in t.lower() for t in send_calls), f"Clear confirmation not found in: {send_calls}"
+
+
+@pytest.mark.asyncio
+async def test_clear_command_case_insensitive(nlm_app, mock_nlm_client, mock_streaming_response):
+    """/CLEAR and /Clear also trigger memory clearing."""
+    mock_nlm_client.clear_session = MagicMock(return_value=True)
+
+    context = create_mock_context(
+        activity_type="message",
+        text=" /CLEAR ",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    mock_nlm_client.clear_session.assert_called_once()
+    mock_nlm_client.query_stream.assert_not_called()

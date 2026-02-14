@@ -103,3 +103,42 @@ def test_separate_sessions_independent():
     assert len(mgr.get_messages("user-b")) == 2
     assert mgr.get_messages("user-a")[0].content == "Q-A"
     assert mgr.get_messages("user-b")[0].content == "Q-B"
+
+
+def test_max_messages_trims_oldest():
+    """max_messages trims oldest messages when exceeded."""
+    mgr = ConversationMemoryManager(ttl=3600, maxsize=100, max_messages=4)
+    mgr.add_exchange("s1", "Q1", "A1")  # 2 messages
+    mgr.add_exchange("s1", "Q2", "A2")  # 4 messages (at limit)
+    mgr.add_exchange("s1", "Q3", "A3")  # 6 -> trimmed to 4
+
+    messages = mgr.get_messages("s1")
+    assert len(messages) == 4
+    # Should keep the most recent 4 messages (Q2, A2, Q3, A3)
+    assert messages[0].content == "Q2"
+    assert messages[1].content == "A2"
+    assert messages[2].content == "Q3"
+    assert messages[3].content == "A3"
+
+
+def test_max_messages_zero_unlimited():
+    """max_messages=0 keeps all messages (unlimited)."""
+    mgr = ConversationMemoryManager(ttl=3600, maxsize=100, max_messages=0)
+    for i in range(10):
+        mgr.add_exchange("s1", f"Q{i}", f"A{i}")
+
+    messages = mgr.get_messages("s1")
+    assert len(messages) == 20  # 10 exchanges * 2 messages each
+
+
+def test_max_messages_preserves_pairs():
+    """max_messages with even number preserves complete Q&A pairs."""
+    mgr = ConversationMemoryManager(ttl=3600, maxsize=100, max_messages=2)
+    mgr.add_exchange("s1", "Q1", "A1")
+    mgr.add_exchange("s1", "Q2", "A2")
+
+    messages = mgr.get_messages("s1")
+    assert len(messages) == 2
+    # Only the latest exchange remains
+    assert messages[0].content == "Q2"
+    assert messages[1].content == "A2"

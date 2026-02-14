@@ -1,7 +1,7 @@
 # Planning
-
-- [ ] Optimize bot conversation history management: only keep last-N messages in conversation history
-- [ ] command to clean conversation memory -> Check if it is possible to create new conversation in Teams
+- [ ] Migrate to Langchain/Langgraph Agent
+- [Doing] Optimize bot conversation history management: only keep last-N messages in conversation history
+- [Doing] command to clean conversation memory -> Check if it is possible to create new conversation in Teams
 - [ ] Migrate all Claude skills to Antigravity
 
 # Done

@@ -146,6 +146,7 @@ def create_app() -> Application:
         memory = ConversationMemoryManager(
             ttl=settings.nlm_memory_ttl,
             maxsize=settings.nlm_memory_maxsize,
+            max_messages=settings.nlm_memory_max_messages,
         )
         nlm_client = NLMClient(
             settings,
