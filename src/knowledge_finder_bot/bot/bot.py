@@ -243,11 +243,15 @@ def create_agent_app(
         is_personal_scope = conversation_type == "personal" or conversation_type is None
         use_streaming = streaming._is_streaming_channel and is_personal_scope
 
+        # Extract Teams conversation ID for session isolation
+        conversation_id = context.activity.conversation.id
+
         logger.info(
             "nlm_query_start",
             user_name=user_name,
             use_streaming=use_streaming,
             conversation_type=conversation_type,
+            conversation_id=conversation_id,
             channel_id=str(getattr(context.activity, "channel_id", None)),
         )
 
@@ -262,8 +266,8 @@ def create_agent_app(
                 async for chunk in nlm_client.query_stream(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
-                    chat_id=aad_object_id,
-                    session_id=aad_object_id,
+                    chat_id=conversation_id,
+                    session_id=conversation_id,
                 ):
                     if chunk.chunk_type == "meta":
                         if chunk.model and notebook_id is None:
@@ -306,8 +310,8 @@ def create_agent_app(
                 async for chunk in nlm_client.query_stream(
                     user_message=user_message,
                     allowed_notebooks=list(allowed_notebooks),
-                    chat_id=aad_object_id,
-                    session_id=aad_object_id,
+                    chat_id=conversation_id,
+                    session_id=conversation_id,
                 ):
                     if chunk.chunk_type == "meta":
                         if chunk.model and notebook_id is None:
@@ -339,7 +343,8 @@ def create_agent_app(
             logger.info(
                 "nlm_query_delivered",
                 notebook_id=notebook_id,
-                chat_id=aad_object_id,
+                conversation_id=conversation_id,
+                aad_object_id=aad_object_id,
                 use_streaming=use_streaming,
             )
 
@@ -349,7 +354,7 @@ def create_agent_app(
                     question=user_message,
                     answer=answer_text,
                     allowed_notebooks=list(allowed_notebooks),
-                    chat_id=aad_object_id,
+                    chat_id=conversation_id,
                 )
                 if followups:
                     from microsoft_agents.activity import (

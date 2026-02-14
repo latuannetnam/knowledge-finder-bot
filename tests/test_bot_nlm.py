@@ -31,6 +31,7 @@ def create_mock_context(
     context.activity.members_added = None
     context.activity.conversation = MagicMock()
     context.activity.conversation.conversation_type = conversation_type
+    context.activity.conversation.id = "test-conversation-id"
 
     return context
 
@@ -106,6 +107,27 @@ async def test_streaming_query_stream_called(nlm_app, mock_nlm_client, mock_stre
     call_kwargs = mock_nlm_client.query_stream.call_args.kwargs
     assert call_kwargs["user_message"] == "What is the leave policy?"
     assert "hr-notebook" in call_kwargs["allowed_notebooks"]
+
+
+@pytest.mark.asyncio
+async def test_conversation_id_used_as_chat_id(nlm_app, mock_nlm_client, mock_streaming_response):
+    """chat_id and session_id use conversation.id, not aad_object_id."""
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+    context.activity.conversation.id = "conv-abc-123"
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    call_kwargs = mock_nlm_client.query_stream.call_args.kwargs
+    assert call_kwargs["chat_id"] == "conv-abc-123"
+    assert call_kwargs["session_id"] == "conv-abc-123"
 
 
 @pytest.mark.asyncio

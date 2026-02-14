@@ -49,9 +49,13 @@ graph TD
   - Streaming responses with SSE chunk buffering via `astream()`
   - Non-streaming fallback via `ainvoke()`
   - Per-request ACL via `extra_body.metadata.allowed_notebooks`
+  - **Session Isolation**: Uses Teams `conversation.id` as `chat_id` and `session_id`
+    - Each conversation (personal, group, channel) gets isolated session history
+    - `aad_object_id` is used only for ACL enforcement and user identification
 - **ConversationMemoryManager**: Per-session conversation history
   - TTLCache with configurable TTL (default: 1 hour) and maxsize (default: 1000)
   - Stores Q&A exchanges for multi-turn context
+  - Sessions keyed by `conversation.id` for proper isolation
 - **Question Rewriting**: Automatic follow-up disambiguation
   - Rewrites follow-up questions as standalone using conversation history
   - Uses nlm-proxy's `llm_task` route (triggered by `### Task:` prefix)

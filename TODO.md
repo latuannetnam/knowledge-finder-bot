@@ -1,7 +1,7 @@
 # Planning
-- [ ] Refactor to langchain for complext multi-turn conversation
-- [ ] Optimize bot conversation history management: request rewrite with conversation history, conversation memory etc.
-- [ ] Generate follow-up questions based on nlm-proxy response
+
+- [ ] Optimize bot conversation history management: only keep last-N messages in conversation history
+- [ ] command to clean conversation memory -> Check if it is possible to create new conversation in Teams
 - [ ] Migrate all Claude skills to Antigravity
 
 # Done
@@ -18,3 +18,5 @@
 - [Done] Remove legacy MICROSOFT_APP_ID settings
 - [Done] Migrate all Claude memory to Antigravity
 - [Done] Check weather the MICROSOFT_APP_TENANT_ID variable is required for Graph API client or we need only CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID -> only keep MICROSOFT_APP_TENANT_ID as required for Graph API client
+- [Done] Refactor to langchain for complext multi-turn conversation
+- [Done] Use Teams conversation.id for Session Management
