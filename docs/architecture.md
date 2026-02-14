@@ -44,7 +44,7 @@ graph TD
 - Maps Azure AD security groups to NotebookLM notebook IDs.
 - Ensures users can only query notebooks they are authorized to access.
 
-### 4. nlm-proxy Integration (`src/knowledge_finder_bot/nlm/`)
+### 4. [nlm-proxy](https://github.com/latuannetnam/nlm-proxy) Integration (`src/knowledge_finder_bot/nlm/`)
 - **NLMClient** (Hybrid approach — see ADR-012):
   - **`AsyncOpenAI`** (raw SDK) for query/streaming — preserves `reasoning_content` from SSE deltas
   - **`ChatOpenAI`** (LangChain) for rewrite/followup — message-based features only needing `content`
@@ -88,7 +88,7 @@ graph TD
   - Microsoft-native tunneling solution for Azure Bot Service development
   - Persistent subdomain eliminates need to update bot configuration
 
-- **nlm-proxy Client: Hybrid AsyncOpenAI + ChatOpenAI**
+- **[nlm-proxy](https://github.com/latuannetnam/nlm-proxy) Client: Hybrid AsyncOpenAI + ChatOpenAI**
   - `AsyncOpenAI` (raw SDK) for query/streaming — direct access to `reasoning_content` in SSE deltas
   - `ChatOpenAI` (LangChain) for rewrite/followup — leverages LangChain message types
   - Conversation memory via `langchain-core` message types

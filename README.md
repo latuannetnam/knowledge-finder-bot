@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/Tests-72%2F72_passing-brightgreen)](./tests/)
 [![Coverage](https://img.shields.io/badge/Coverage-77%25-green)](./tests/)
 
-This bot allows users to query curated knowledge bases (NotebookLM notebooks) directly from their chat interface. It handles authentication, enforces notebook-level access control via Azure AD groups, and routes queries to the appropriate notebook.
+This bot allows users to query curated knowledge bases (NotebookLM notebooks) directly from their chat interface. It handles authentication, enforces notebook-level access control via Azure AD groups, and routes queries to the appropriate notebook via [nlm-proxy](https://github.com/latuannetnam/nlm-proxy).
 
 ## ✨ Features
 
@@ -18,7 +18,7 @@ This bot allows users to query curated knowledge bases (NotebookLM notebooks) di
 - ✅ **Graceful Fallback** - Echo mode when ACL/nlm-proxy unavailable
 - ✅ **Caching** - 5-minute TTL cache for Graph API calls (reduces API load by ~95%)
 - ✅ **M365 Agents SDK** - Modern Microsoft bot framework
-- ✅ **NotebookLM Integration** - Query notebooks via nlm-proxy with streaming responses
+- ✅ **NotebookLM Integration** - Query notebooks via [nlm-proxy](https://github.com/latuannetnam/nlm-proxy) with streaming responses
 - ✅ **Multi-turn Conversations** - 24-hour session cache for context retention
 - ✅ **Source Attribution** - Responses include notebook source citations
 
