@@ -373,24 +373,25 @@ def create_agent_app(
                 )
                 if followups:
                     from microsoft_agents.activity import (
-                        SuggestedActions,
                         CardAction,
+                        HeroCard,
                     )
-                    suggested = SuggestedActions(
-                        to=[context.activity.from_property.id],
-                        actions=[
+                    from microsoft_agents.hosting.core import CardFactory
+
+                    card = HeroCard(
+                        text="💡 **You might also want to ask:**",
+                        buttons=[
                             CardAction(
                                 type="imBack",
                                 title=q,
                                 value=q,
                             )
                             for q in followups[:3]
-                        ]
+                        ],
                     )
                     followup_activity = Activity(
                         type="message",
-                        text="💡 **You might also want to ask:**",
-                        suggested_actions=suggested,
+                        attachments=[CardFactory.hero_card(card)],
                     )
                     await context.send_activity(followup_activity)
                     logger.info("nlm_followups_sent", count=len(followups))

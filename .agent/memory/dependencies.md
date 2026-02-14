@@ -20,7 +20,8 @@ dependencies = [
     "httpx>=0.25.0",      # ✅ Graph API client (added for ACL)
     "pyyaml>=6.0",        # ✅ ACL YAML config (added for ACL)
     "cachetools>=5.3.0",  # ✅ User info caching (added for ACL)
-    "openai>=1.59.0",     # ✅ nlm-proxy client (added for nlm integration)
+    "openai>=1.59.0",     # ✅ nlm-proxy query/streaming (reasoning_content)
+    "langchain-openai>=1.1.0",  # ✅ nlm-proxy rewrite/followup (message types)
 ]
 ```
 
@@ -44,7 +45,8 @@ dev = [
 | `httpx>=0.25.0` | Graph API HTTP client | ✅ Implemented (ACL phase) |
 | `pyyaml>=6.0` | ACL YAML config | ✅ Implemented (ACL phase) |
 | `cachetools>=5.3.0` | User info caching | ✅ Implemented (ACL + nlm phases) |
-| `openai>=1.59.0` | nlm-proxy client | ✅ Implemented (nlm phase) |
+| `openai>=1.59.0` | nlm-proxy query/streaming (raw SDK) | ✅ Hybrid client (ADR-012) |
+| `langchain-openai>=1.1.0` | nlm-proxy rewrite/followup (LangChain) | ✅ Hybrid client (ADR-012) |
 | `redis>=5.0.0` | Persistent caching | ⏳ Future (optional) |
 
 ## ACL Dependencies Details
@@ -66,10 +68,15 @@ dev = [
   - Session cache: TTLCache (24-hour TTL, 1000 sessions) - multi-turn conversations
 
 **openai** - OpenAI Python SDK (AsyncOpenAI)
-- Used in: `nlm/client.py`
-- Version: >=1.59.0 (installed v2.18.0)
+- Used in: `nlm/client.py` (as `self._client`)
+- Purpose: Query/streaming — preserves `reasoning_content` from SSE deltas
 - Features: Streaming responses, non-streaming fallback, SSE chunk buffering
 - Extra body: Custom metadata for `allowed_notebooks` per-request ACL
+
+**langchain-openai** - LangChain wrapper for OpenAI API (ChatOpenAI)
+- Used in: `nlm/client.py` (as `self._llm`)
+- Purpose: Question rewriting and follow-up generation (only needs `content`)
+- Features: LangChain message types, `ainvoke()` for non-streaming LLM tasks
 
 ## Package Manager
 

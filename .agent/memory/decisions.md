@@ -273,6 +273,53 @@ AFTER:  User → StreamingResponse(context)
 
 ---
 
+### ADR-012: Hybrid Client — AsyncOpenAI + ChatOpenAI
+
+**Date:** 2025-02-14
+
+**Decision:** Use raw `AsyncOpenAI` for query/streaming and `ChatOpenAI` (LangChain) for rewrite/followup in `NLMClient`.
+
+**Rationale:**
+- nlm-proxy sends `reasoning_content` as a delta field in Chat Completions SSE format (OpenAI o1/o3 style)
+- LangChain `ChatOpenAI` v1.1.9's `_convert_delta_to_message_chunk` silently drops `reasoning_content` — it only extracts `content`, `function_call`, and `tool_calls`
+- LangChain docs confirm reasoning is only supported via the **Responses API** (`use_responses_api=True`), not Chat Completions
+- Raw `AsyncOpenAI` SDK preserves all delta fields via `getattr(delta, "reasoning_content", None)`
+- LangChain is still valuable for rewrite/followup (message types, conversation history)
+
+**Implementation:**
+- `self._client` (`AsyncOpenAI`) — used by `query_stream()`, `_query_streaming()`, `_query_non_streaming()`
+- `self._llm` (`ChatOpenAI`) — used by `_rewrite_question()`, `_generate_followups()`
+
+**Consequences:**
+- Both `openai` and `langchain-openai` are required dependencies
+- Tests mock `self._client` for query paths and `self._llm` for rewrite/followup paths
+- `reasoning_content` is correctly passed through to the bot for "Show reasoning" display
+
+---
+
+### ADR-013: HeroCard for Follow-up Questions
+
+**Date:** 2025-02-14
+
+**Decision:** Use `HeroCard` with vertical buttons instead of `SuggestedActions` for follow-up question display in Teams.
+
+**Rationale:**
+- `SuggestedActions` renders buttons **horizontally** in Teams
+- Long question text causes the 3rd button to be clipped or pushed off-screen
+- `HeroCard` buttons render **vertically**, accommodating longer question text
+- All 3 follow-up questions are always visible regardless of text length
+
+**Implementation:**
+- Create `HeroCard(text="💡 ...", buttons=[CardAction(...)])` with `imBack` actions
+- Attach via `CardFactory.hero_card(card)` as an `Attachment` on the `Activity`
+- Verified: Agent Playground shows 3 buttons, Teams shows 3 buttons
+
+**Consequences:**
+- Follow-ups appear as a card with vertical buttons instead of inline suggested actions
+- Cards persist in chat history (unlike `SuggestedActions` which disappear after click)
+
+---
+
 ## Template for New Decisions
 
 ```markdown

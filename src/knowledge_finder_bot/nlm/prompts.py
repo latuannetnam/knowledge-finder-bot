@@ -22,7 +22,7 @@ REWRITE_USER_TEMPLATE = "### Task: Rewrite this follow-up as a standalone questi
 # for llm_task routing through nlm-proxy.
 FOLLOWUP_SYSTEM_PROMPT = """\
 You are a helpful assistant that suggests follow-up questions. Given a \
-question and its answer, suggest 2-3 concise follow-up questions the user \
+question and its answer, suggest 3 concise follow-up questions the user \
 might want to ask next.
 
 Rules:

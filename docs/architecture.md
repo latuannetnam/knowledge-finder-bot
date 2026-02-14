@@ -45,9 +45,9 @@ graph TD
 - Ensures users can only query notebooks they are authorized to access.
 
 ### 4. nlm-proxy Integration (`src/knowledge_finder_bot/nlm/`)
-- **NLMClient**: Uses Langchain `ChatOpenAI` to communicate with nlm-proxy
-  - Streaming responses with SSE chunk buffering via `astream()`
-  - Non-streaming fallback via `ainvoke()`
+- **NLMClient** (Hybrid approach — see ADR-012):
+  - **`AsyncOpenAI`** (raw SDK) for query/streaming — preserves `reasoning_content` from SSE deltas
+  - **`ChatOpenAI`** (LangChain) for rewrite/followup — message-based features only needing `content`
   - Per-request ACL via `extra_body.metadata.allowed_notebooks`
   - **Session Isolation**: Uses Teams `conversation.id` as `chat_id` and `session_id`
     - Each conversation (personal, group, channel) gets isolated session history
@@ -59,9 +59,9 @@ graph TD
 - **Question Rewriting**: Automatic follow-up disambiguation
   - Rewrites follow-up questions as standalone using conversation history
   - Uses nlm-proxy's `llm_task` route (triggered by `### Task:` prefix)
-- **Follow-up Suggestions**: Post-answer question generation
-  - Generates 2-3 suggested follow-up questions
-  - Displayed as SuggestedActions in Teams
+- **Follow-up Suggestions**: Post-answer question generation (see ADR-013)
+  - Generates 3 suggested follow-up questions
+  - Displayed as **HeroCard** with vertical buttons in Teams
 - **Response Formatter**: Source attribution in responses
   - Extracts notebook info from `reasoning_content`
   - Adds markdown-formatted source citations
@@ -88,8 +88,8 @@ graph TD
   - Microsoft-native tunneling solution for Azure Bot Service development
   - Persistent subdomain eliminates need to update bot configuration
 
-- **nlm-proxy Client: Langchain + ChatOpenAI**
-  - Uses `langchain-openai` `ChatOpenAI` for OpenAI-compatible API (nlm-proxy)
-  - Supports both streaming (default) and non-streaming modes
+- **nlm-proxy Client: Hybrid AsyncOpenAI + ChatOpenAI**
+  - `AsyncOpenAI` (raw SDK) for query/streaming — direct access to `reasoning_content` in SSE deltas
+  - `ChatOpenAI` (LangChain) for rewrite/followup — leverages LangChain message types
   - Conversation memory via `langchain-core` message types
   - LLM-powered question rewriting and follow-up generation via `### Task:` routing

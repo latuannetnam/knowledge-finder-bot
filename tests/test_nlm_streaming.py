@@ -1,9 +1,9 @@
 """Tests for NLMChunk model and query_stream."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessageChunk
 
 from knowledge_finder_bot.nlm.client import NLMClient
 from knowledge_finder_bot.nlm.models import NLMChunk
@@ -38,28 +38,21 @@ def nlm_settings(mock_env_vars):
         return Settings()
 
 
-@pytest.fixture
-def mock_llm():
-    """Create a MagicMock that replaces ChatOpenAI for testing."""
-    return MagicMock()
-
-
-def _make_chunk(content="", reasoning=None, model=None, finish_reason=None):
-    """Build an AIMessageChunk matching Langchain streaming format."""
-    additional_kwargs = {}
-    if reasoning is not None:
-        additional_kwargs["reasoning_content"] = reasoning
-
-    response_metadata = {}
-    if model is not None:
-        response_metadata["model_name"] = model
-    if finish_reason is not None:
-        response_metadata["finish_reason"] = finish_reason
-
-    return AIMessageChunk(
+def _make_raw_chunk(content=None, reasoning=None, model=None, finish_reason=None):
+    """Build a raw OpenAI SDK streaming chunk (SimpleNamespace-based)."""
+    delta = SimpleNamespace(
         content=content,
-        additional_kwargs=additional_kwargs,
-        response_metadata=response_metadata,
+        reasoning_content=reasoning,
+        role="assistant" if content or reasoning else None,
+    )
+    choice = SimpleNamespace(
+        delta=delta,
+        finish_reason=finish_reason,
+        index=0,
+    )
+    return SimpleNamespace(
+        model=model,
+        choices=[choice],
     )
 
 
@@ -71,23 +64,31 @@ async def _collect_chunks(gen):
     return result
 
 
-@pytest.mark.asyncio
-async def test_query_stream_yields_reasoning_chunks(nlm_settings, mock_llm):
-    """Reasoning content arrives as chunk_type='reasoning'."""
-    client = NLMClient(nlm_settings)
-    client._llm = mock_llm
-
-    chunks = [
-        _make_chunk(reasoning="Thinking about ", model="kf"),
-        _make_chunk(reasoning="the answer"),
-        _make_chunk(content="Result", finish_reason="stop"),
-    ]
-
-    async def mock_astream(*args, **kwargs):
+def _make_mock_stream(chunks):
+    """Create an async iterator that yields raw chunks, wrapped in a coroutine."""
+    async def _stream():
         for c in chunks:
             yield c
 
-    mock_llm.astream = mock_astream
+    async def mock_create(*args, **kwargs):
+        return _stream()
+
+    return mock_create
+
+
+@pytest.mark.asyncio
+async def test_query_stream_yields_reasoning_chunks(nlm_settings):
+    """Reasoning content arrives as chunk_type='reasoning'."""
+    client = NLMClient(nlm_settings)
+
+    chunks = [
+        _make_raw_chunk(reasoning="Thinking about ", model="kf"),
+        _make_raw_chunk(reasoning="the answer"),
+        _make_raw_chunk(content="Result", finish_reason="stop"),
+    ]
+
+    client._client = MagicMock()
+    client._client.chat.completions.create = AsyncMock(side_effect=_make_mock_stream(chunks))
 
     result = await _collect_chunks(client.query_stream(
         user_message="Test",
@@ -101,21 +102,17 @@ async def test_query_stream_yields_reasoning_chunks(nlm_settings, mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_query_stream_yields_content_chunks(nlm_settings, mock_llm):
+async def test_query_stream_yields_content_chunks(nlm_settings):
     """Answer content arrives as chunk_type='content'."""
     client = NLMClient(nlm_settings)
-    client._llm = mock_llm
 
     chunks = [
-        _make_chunk(content="Hello ", model="kf"),
-        _make_chunk(content="world!", finish_reason="stop"),
+        _make_raw_chunk(content="Hello ", model="kf"),
+        _make_raw_chunk(content="world!", finish_reason="stop"),
     ]
 
-    async def mock_astream(*args, **kwargs):
-        for c in chunks:
-            yield c
-
-    mock_llm.astream = mock_astream
+    client._client = MagicMock()
+    client._client.chat.completions.create = AsyncMock(side_effect=_make_mock_stream(chunks))
 
     result = await _collect_chunks(client.query_stream(
         user_message="Test",
@@ -129,22 +126,18 @@ async def test_query_stream_yields_content_chunks(nlm_settings, mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_query_stream_yields_model_meta(nlm_settings, mock_llm):
+async def test_query_stream_yields_model_meta(nlm_settings):
     """First chunk with model field yields a meta chunk."""
     client = NLMClient(nlm_settings)
-    client._llm = mock_llm
 
     chunks = [
-        _make_chunk(reasoning="think", model="hr-notebook"),
-        _make_chunk(reasoning="more", model="hr-notebook"),  # second time - no duplicate meta
-        _make_chunk(finish_reason="stop"),
+        _make_raw_chunk(reasoning="think", model="hr-notebook"),
+        _make_raw_chunk(reasoning="more", model="hr-notebook"),  # no duplicate meta
+        _make_raw_chunk(finish_reason="stop"),
     ]
 
-    async def mock_astream(*args, **kwargs):
-        for c in chunks:
-            yield c
-
-    mock_llm.astream = mock_astream
+    client._client = MagicMock()
+    client._client.chat.completions.create = AsyncMock(side_effect=_make_mock_stream(chunks))
 
     result = await _collect_chunks(client.query_stream(
         user_message="Test",
@@ -157,21 +150,17 @@ async def test_query_stream_yields_model_meta(nlm_settings, mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_query_stream_yields_finish_reason(nlm_settings, mock_llm):
+async def test_query_stream_yields_finish_reason(nlm_settings):
     """Last chunk yields meta with finish_reason."""
     client = NLMClient(nlm_settings)
-    client._llm = mock_llm
 
     chunks = [
-        _make_chunk(content="Done", model="kf"),
-        _make_chunk(finish_reason="stop"),
+        _make_raw_chunk(content="Done", model="kf"),
+        _make_raw_chunk(finish_reason="stop"),
     ]
 
-    async def mock_astream(*args, **kwargs):
-        for c in chunks:
-            yield c
-
-    mock_llm.astream = mock_astream
+    client._client = MagicMock()
+    client._client.chat.completions.create = AsyncMock(side_effect=_make_mock_stream(chunks))
 
     result = await _collect_chunks(client.query_stream(
         user_message="Test",
@@ -184,16 +173,12 @@ async def test_query_stream_yields_finish_reason(nlm_settings, mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_query_stream_propagates_error(nlm_settings, mock_llm):
+async def test_query_stream_propagates_error(nlm_settings):
     """Exception during streaming propagates to caller."""
     client = NLMClient(nlm_settings)
-    client._llm = mock_llm
 
-    async def mock_astream(*args, **kwargs):
-        raise Exception("Connection refused")
-        yield  # noqa: make it an async generator
-
-    mock_llm.astream = mock_astream
+    client._client = MagicMock()
+    client._client.chat.completions.create = AsyncMock(side_effect=Exception("Connection refused"))
 
     with pytest.raises(Exception, match="Connection refused"):
         async for _ in client.query_stream(
@@ -204,18 +189,21 @@ async def test_query_stream_propagates_error(nlm_settings, mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_query_stream_passes_metadata(nlm_settings, mock_llm):
-    """allowed_notebooks and chat_id passed as extra_body to astream."""
+async def test_query_stream_passes_metadata(nlm_settings):
+    """allowed_notebooks and chat_id passed as extra_body."""
     client = NLMClient(nlm_settings)
-    client._llm = mock_llm
 
     captured_kwargs = {}
 
-    async def mock_astream(*args, **kwargs):
-        captured_kwargs.update(kwargs)
-        yield _make_chunk(content="ok", model="kf", finish_reason="stop")
+    async def _stream():
+        yield _make_raw_chunk(content="ok", model="kf", finish_reason="stop")
 
-    mock_llm.astream = mock_astream
+    async def mock_create(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _stream()
+
+    client._client = MagicMock()
+    client._client.chat.completions.create = AsyncMock(side_effect=mock_create)
 
     async for _ in client.query_stream(
         user_message="Test",
