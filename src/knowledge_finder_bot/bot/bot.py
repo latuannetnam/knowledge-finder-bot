@@ -100,8 +100,8 @@ def create_agent_app(
         for member in context.activity.members_added or []:
             if member.id != context.activity.recipient.id:
                 await context.send_activity(
-                    "Hello! I'm the NotebookLM Bot.\n\n"
-                    "Ask me anything about your organization's knowledge bases."
+                    "Xin chào! Tôi là trợ lý về kiến thức của NetNam.\n\n"
+                    "Bạn có thể hỏi tôi mọi thông tin liên quan đến kiến thức và hoạt động của tổ chức."
                 )
 
     @agent_app.message(re.compile(r".*"))
