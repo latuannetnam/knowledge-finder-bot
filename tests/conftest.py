@@ -21,6 +21,7 @@ def mock_env_vars():
         "HOST": "127.0.0.1",
         "PORT": "3978",
         "LOG_LEVEL": "DEBUG",
+        "LOG_FILE": "",
         "NLM_PROXY_URL": "",
         "NLM_PROXY_API_KEY": "",
     }

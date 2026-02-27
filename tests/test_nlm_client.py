@@ -408,3 +408,121 @@ async def test_rewrite_failure_falls_back_to_original(nlm_settings):
 
     assert result.rewritten_question is None
     assert result.answer == "Answer from original"
+
+
+@pytest.mark.asyncio
+async def test_generate_followups_returns_questions(nlm_settings):
+    """generate_followups returns parsed follow-up questions."""
+    client = NLMClient(nlm_settings, enable_followup=True)
+
+    followup_response = _make_ai_message(
+        content="What are the benefits?\nHow does it compare?\nCan you explain more?",
+    )
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=followup_response)
+    client._llm = mock_llm
+
+    result = await client.generate_followups(
+        question="What is X?",
+        answer="X is Y.",
+        allowed_notebooks=["nb-1"],
+        chat_id="chat-1",
+    )
+
+    assert result is not None
+    assert len(result) == 3
+    assert "What are the benefits?" in result
+    mock_llm.ainvoke.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_followups_disabled_returns_none(nlm_settings):
+    """When enable_followup=False, returns None immediately."""
+    client = NLMClient(nlm_settings, enable_followup=False)
+
+    result = await client.generate_followups(
+        question="Q", answer="A", allowed_notebooks=["nb-1"],
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_generate_followups_error_returns_none(nlm_settings):
+    """When LLM throws exception, returns None gracefully."""
+    client = NLMClient(nlm_settings, enable_followup=True)
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
+    client._llm = mock_llm
+
+    result = await client.generate_followups(
+        question="Q", answer="A", allowed_notebooks=["nb-1"],
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_generate_followups_empty_response_returns_none(nlm_settings):
+    """When LLM returns empty content, returns None."""
+    client = NLMClient(nlm_settings, enable_followup=True)
+
+    empty_response = _make_ai_message(content="")
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=empty_response)
+    client._llm = mock_llm
+
+    result = await client.generate_followups(
+        question="Q", answer="A", allowed_notebooks=["nb-1"],
+    )
+
+    assert result is None
+
+
+def test_clear_session_with_memory(nlm_settings):
+    """clear_session clears an existing session and returns True."""
+    from knowledge_finder_bot.nlm.memory import ConversationMemoryManager
+
+    memory = ConversationMemoryManager(ttl=3600, maxsize=100)
+    client = NLMClient(nlm_settings, memory=memory)
+
+    memory.add_exchange("s1", "Q1", "A1")
+    result = client.clear_session("s1")
+
+    assert result is True
+    assert memory.get_messages("s1") == []
+
+
+def test_clear_session_empty_returns_false(nlm_settings):
+    """No history to clear returns False."""
+    from knowledge_finder_bot.nlm.memory import ConversationMemoryManager
+
+    memory = ConversationMemoryManager(ttl=3600, maxsize=100)
+    client = NLMClient(nlm_settings, memory=memory)
+
+    result = client.clear_session("nonexistent-session")
+    assert result is False
+
+
+def test_clear_session_no_memory_manager(nlm_settings):
+    """Client without memory manager returns False."""
+    client = NLMClient(nlm_settings)  # no memory
+
+    result = client.clear_session("any-session")
+    assert result is False
+
+
+def test_build_extra_body_structure(nlm_settings):
+    """_build_extra_body returns correct dict structure."""
+    client = NLMClient(nlm_settings)
+
+    result = client._build_extra_body(["nb-1", "nb-2"], chat_id="chat-123")
+
+    assert result == {
+        "metadata": {
+            "allowed_notebooks": ["nb-1", "nb-2"],
+            "chat_id": "chat-123",
+        }
+    }
+

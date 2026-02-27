@@ -488,3 +488,84 @@ async def test_clear_command_case_insensitive(nlm_app, mock_nlm_client, mock_str
 
     mock_nlm_client.clear_session.assert_called_once()
     mock_nlm_client.query_stream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_followup_questions_sent_as_hero_card(nlm_app, mock_nlm_client, mock_streaming_response):
+    """When generate_followups returns questions, a HeroCard is sent."""
+    mock_nlm_client.generate_followups = AsyncMock(
+        return_value=["What about X?", "How does Y work?", "Explain Z?"]
+    )
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    # Find activities with attachments (HeroCard)
+    followup_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if hasattr(call[0][0], 'attachments') and getattr(call[0][0], 'attachments', None)
+    ]
+    assert len(followup_calls) >= 1, f"No follow-up card found in: {context.send_activity.call_args_list}"
+
+
+@pytest.mark.asyncio
+async def test_followup_disabled_no_card_sent(nlm_app, mock_nlm_client, mock_streaming_response):
+    """When generate_followups returns None, no follow-up card is sent."""
+    mock_nlm_client.generate_followups = AsyncMock(return_value=None)
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    # No Activity with attachments should be sent via context.send_activity
+    followup_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if hasattr(call[0][0], 'attachments') and getattr(call[0][0], 'attachments', None)
+    ]
+    assert len(followup_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_followup_error_does_not_crash_response(nlm_app, mock_nlm_client, mock_streaming_response):
+    """Exception in followup generation doesn't break main response."""
+    mock_nlm_client.generate_followups = AsyncMock(side_effect=Exception("Followup failed"))
+
+    context = create_mock_context(
+        activity_type="message",
+        text="Hello",
+        aad_object_id="test-aad-id",
+    )
+
+    with patch(
+        "knowledge_finder_bot.bot.bot.StreamingResponse",
+        return_value=mock_streaming_response,
+    ):
+        await nlm_app.on_turn(context)
+
+    # Main response should still complete (end_stream called)
+    mock_streaming_response.end_stream.assert_awaited_once()
+
+    # No error message sent to user for followup failure
+    error_calls = [
+        call[0][0] for call in context.send_activity.call_args_list
+        if isinstance(call[0][0], str) and "error" in call[0][0].lower()
+    ]
+    assert len(error_calls) == 0
+

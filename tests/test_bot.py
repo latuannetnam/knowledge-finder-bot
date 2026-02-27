@@ -68,7 +68,7 @@ async def test_welcome_message(echo_app):
 
     calls = context.send_activity.call_args_list
     welcome_found = any(
-        isinstance(c[0][0], str) and "NotebookLM Bot" in c[0][0]
+        isinstance(c[0][0], str) and "Xin chào" in c[0][0]
         for c in calls
     )
     assert welcome_found, f"Welcome not found in: {calls}"
@@ -236,8 +236,8 @@ async def test_real_aad_id_routes_to_real_client(dual_mode_app, mock_graph_clien
 
 
 @pytest.mark.asyncio
-async def test_mock_only_mode_handles_real_aad_id(settings, acl_config_path, mock_graph_client):
-    """When only mock client is available, real AAD IDs fall back to mock."""
+async def test_mock_only_mode_rejects_real_aad_id(settings, acl_config_path, mock_graph_client):
+    """When only mock client is available, real AAD IDs get Graph API error."""
     from knowledge_finder_bot.acl.service import ACLService
 
     acl_service = ACLService(acl_config_path)
@@ -255,7 +255,14 @@ async def test_mock_only_mode_handles_real_aad_id(settings, acl_config_path, moc
     )
     await app.on_turn(context)
 
-    mock_graph_client.get_user_with_groups.assert_called_once()
+    # Real AAD IDs without a real Graph client should get an error, not fallback to mock
+    mock_graph_client.get_user_with_groups.assert_not_called()
+    calls = context.send_activity.call_args_list
+    error_found = any(
+        isinstance(c[0][0], str) and "Graph API is not configured" in c[0][0]
+        for c in calls
+    )
+    assert error_found, f"Graph API error not found in: {calls}"
 
 
 @pytest.mark.asyncio
@@ -287,3 +294,23 @@ async def test_no_clients_returns_error(settings, acl_config_path):
         for c in calls
     )
     assert echo_found, f"Should fall back to echo mode: {calls}"
+
+
+# --- Helper function tests ---
+
+
+def test_is_fake_aad_id_with_fake_prefix():
+    """_is_fake_aad_id returns True for Agent Playground fake AAD IDs."""
+    from knowledge_finder_bot.bot.bot import _is_fake_aad_id
+
+    assert _is_fake_aad_id("00000000-0000-0000-0000-0000000000020") is True
+    assert _is_fake_aad_id("00000000-0000-0000-0000-000000000001") is True
+
+
+def test_is_fake_aad_id_with_real_id():
+    """_is_fake_aad_id returns False for real Azure AD GUIDs."""
+    from knowledge_finder_bot.bot.bot import _is_fake_aad_id
+
+    assert _is_fake_aad_id("bc9f9bde-cdc4-4a54-b1a3-ef88bf23f87b") is False
+    assert _is_fake_aad_id("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee") is False
+
