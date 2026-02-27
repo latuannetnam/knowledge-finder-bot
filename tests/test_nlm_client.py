@@ -78,14 +78,30 @@ def _make_raw_chunk(content=None, reasoning=None, model=None, finish_reason=None
     )
 
 
-def _make_mock_stream(chunks):
-    """Create an async iterator that yields raw chunks, wrapped in a coroutine."""
-    async def _stream():
-        for c in chunks:
+class _MockAsyncStream:
+    """Mock that supports both async iteration and async context manager."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def __aiter__(self):
+        return self._iter_chunks()
+
+    async def _iter_chunks(self):
+        for c in self._chunks:
             yield c
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+def _make_mock_stream(chunks):
+    """Create a mock stream wrapped in a coroutine, matching AsyncOpenAI behavior."""
     async def mock_create(*args, **kwargs):
-        return _stream()
+        return _MockAsyncStream(chunks)
 
     return mock_create
 

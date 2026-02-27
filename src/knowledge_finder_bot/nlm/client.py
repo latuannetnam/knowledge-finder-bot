@@ -226,63 +226,64 @@ class NLMClient:
             extra_body=extra_body,
         )
 
-        async for chunk in stream:
-            chunk_count += 1
-            chunk_model = chunk.model if chunk.model else None
+        async with stream:
+            async for chunk in stream:
+                chunk_count += 1
+                chunk_model = chunk.model if chunk.model else None
 
-            logger.debug(
-                "nlm_chunk_received",
-                chunk_number=chunk_count,
-                has_model=chunk_model is not None,
-                num_choices=len(chunk.choices),
-            )
-
-            if chunk_model and not model_emitted:
                 logger.debug(
-                    "nlm_chunk_meta_emit",
-                    chunk_type="meta",
-                    model=chunk_model,
+                    "nlm_chunk_received",
+                    chunk_number=chunk_count,
+                    has_model=chunk_model is not None,
+                    num_choices=len(chunk.choices),
                 )
-                yield NLMChunk(
-                    chunk_type="meta",
-                    model=chunk_model,
-                )
-                model_emitted = True
 
-            for choice in chunk.choices:
-                delta = choice.delta
-
-                # reasoning_content is in OpenAI o1/o3 format (from nlm-proxy)
-                reasoning = getattr(delta, "reasoning_content", None)
-                if reasoning:
+                if chunk_model and not model_emitted:
                     logger.debug(
-                        "nlm_chunk_reasoning_emit",
-                        chunk_type="reasoning",
-                        text_length=len(reasoning),
-                        text_preview=reasoning[:50] if len(reasoning) > 50 else reasoning,
-                    )
-                    yield NLMChunk(chunk_type="reasoning", text=reasoning)
-
-                if delta.content:
-                    content_parts.append(delta.content)
-                    logger.debug(
-                        "nlm_chunk_content_emit",
-                        chunk_type="content",
-                        text_length=len(delta.content),
-                        text_preview=delta.content[:50] if len(delta.content) > 50 else delta.content,
-                    )
-                    yield NLMChunk(chunk_type="content", text=delta.content)
-
-                if choice.finish_reason:
-                    logger.debug(
-                        "nlm_chunk_finish_emit",
+                        "nlm_chunk_meta_emit",
                         chunk_type="meta",
-                        finish_reason=choice.finish_reason,
+                        model=chunk_model,
                     )
                     yield NLMChunk(
                         chunk_type="meta",
-                        finish_reason=choice.finish_reason,
+                        model=chunk_model,
                     )
+                    model_emitted = True
+
+                for choice in chunk.choices:
+                    delta = choice.delta
+
+                    # reasoning_content is in OpenAI o1/o3 format (from nlm-proxy)
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        logger.debug(
+                            "nlm_chunk_reasoning_emit",
+                            chunk_type="reasoning",
+                            text_length=len(reasoning),
+                            text_preview=reasoning[:50] if len(reasoning) > 50 else reasoning,
+                        )
+                        yield NLMChunk(chunk_type="reasoning", text=reasoning)
+
+                    if delta.content:
+                        content_parts.append(delta.content)
+                        logger.debug(
+                            "nlm_chunk_content_emit",
+                            chunk_type="content",
+                            text_length=len(delta.content),
+                            text_preview=delta.content[:50] if len(delta.content) > 50 else delta.content,
+                        )
+                        yield NLMChunk(chunk_type="content", text=delta.content)
+
+                    if choice.finish_reason:
+                        logger.debug(
+                            "nlm_chunk_finish_emit",
+                            chunk_type="meta",
+                            finish_reason=choice.finish_reason,
+                        )
+                        yield NLMChunk(
+                            chunk_type="meta",
+                            finish_reason=choice.finish_reason,
+                        )
 
         # Store exchange in memory after streaming completes
         if self._memory and session_id:
@@ -407,22 +408,23 @@ class NLMClient:
             extra_body=extra_body,
         )
 
-        async for chunk in stream:
-            if chunk.model:
-                model = chunk.model
+        async with stream:
+            async for chunk in stream:
+                if chunk.model:
+                    model = chunk.model
 
-            for choice in chunk.choices:
-                if choice.finish_reason:
-                    finish_reason = choice.finish_reason
+                for choice in chunk.choices:
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
 
-                delta = choice.delta
-                if delta.content:
-                    content_parts.append(delta.content)
+                    delta = choice.delta
+                    if delta.content:
+                        content_parts.append(delta.content)
 
-                # reasoning_content is in OpenAI o1/o3 format
-                reasoning = getattr(delta, "reasoning_content", None)
-                if reasoning:
-                    reasoning_parts.append(reasoning)
+                    # reasoning_content is in OpenAI o1/o3 format
+                    reasoning = getattr(delta, "reasoning_content", None)
+                    if reasoning:
+                        reasoning_parts.append(reasoning)
 
         logger.info(
             "nlm_query_complete",

@@ -64,14 +64,30 @@ async def _collect_chunks(gen):
     return result
 
 
-def _make_mock_stream(chunks):
-    """Create an async iterator that yields raw chunks, wrapped in a coroutine."""
-    async def _stream():
-        for c in chunks:
+class _MockAsyncStream:
+    """Mock that supports both async iteration and async context manager."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def __aiter__(self):
+        return self._iter_chunks()
+
+    async def _iter_chunks(self):
+        for c in self._chunks:
             yield c
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+def _make_mock_stream(chunks):
+    """Create a mock stream wrapped in a coroutine, matching AsyncOpenAI behavior."""
     async def mock_create(*args, **kwargs):
-        return _stream()
+        return _MockAsyncStream(chunks)
 
     return mock_create
 
@@ -195,12 +211,9 @@ async def test_query_stream_passes_metadata(nlm_settings):
 
     captured_kwargs = {}
 
-    async def _stream():
-        yield _make_raw_chunk(content="ok", model="kf", finish_reason="stop")
-
     async def mock_create(*args, **kwargs):
         captured_kwargs.update(kwargs)
-        return _stream()
+        return _MockAsyncStream([_make_raw_chunk(content="ok", model="kf", finish_reason="stop")])
 
     client._client = MagicMock()
     client._client.chat.completions.create = AsyncMock(side_effect=mock_create)

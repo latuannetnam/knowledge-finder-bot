@@ -1,6 +1,6 @@
 [project]
 name = "knowledge-finder-bot"
-version = "1.0.2"
+version = "1.0.3"
 description = "NotebookLM chatbot for MS Teams and Telegram"
 requires-python = ">=3.11"
 
